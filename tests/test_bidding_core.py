@@ -6,6 +6,7 @@ from bridge_trainer.bidding import (
     RuleSettings,
     game_threshold_adjustment,
     is_legal_response_bid,
+    legal_response_bids_with_interference,
     legal_rebid_bids,
     legal_response_bids,
     legal_responder_rebid_bids,
@@ -318,6 +319,56 @@ class ResponseRecommendationTests(unittest.TestCase):
     def test_splinter_club_singleton_with_spades(self) -> None:
         # 1♠开叫，13 HCP，4张黑桃支持，单张方块 -> 3♦ Splinter
         self.assertEqual(recommend_response("1♠", evaluation(13, 4, 3, 1, 5), vulnerability=VULNERABILITY).bid, "3♦")
+
+    def test_negative_double_after_one_club_one_heart_with_spades(self) -> None:
+        self.assertEqual(
+            recommend_response("1♣", evaluation(8, 4, 2, 3, 4), vulnerability=VULNERABILITY, overcall_bid="1♥").bid,
+            "X",
+        )
+
+    def test_negative_double_after_one_diamond_one_spade_with_hearts(self) -> None:
+        self.assertEqual(
+            recommend_response("1♦", evaluation(8, 2, 4, 3, 4), vulnerability=VULNERABILITY, overcall_bid="1♠").bid,
+            "X",
+        )
+
+    def test_negative_double_disabled_falls_back_to_natural_bid(self) -> None:
+        settings = RuleSettings(negative_double_enabled=False)
+        self.assertEqual(
+            recommend_response(
+                "1♣",
+                evaluation(8, 4, 2, 3, 4),
+                settings=settings,
+                vulnerability=VULNERABILITY,
+                overcall_bid="1♥",
+            ).bid,
+            "1♠",
+        )
+
+    def test_negative_double_below_min_hcp_does_not_double(self) -> None:
+        settings = RuleSettings(negative_double_min_hcp=6)
+        self.assertEqual(
+            recommend_response(
+                "1♣",
+                evaluation(5, 4, 2, 3, 4),
+                settings=settings,
+                vulnerability=VULNERABILITY,
+                overcall_bid="1♥",
+            ).bid,
+            "1♠",
+        )
+
+    def test_negative_double_requires_target_suit_length(self) -> None:
+        self.assertNotEqual(
+            recommend_response("1♦", evaluation(8, 3, 3, 4, 3), vulnerability=VULNERABILITY, overcall_bid="1♥").bid,
+            "X",
+        )
+
+    def test_legal_response_bids_with_interference_includes_x(self) -> None:
+        self.assertIn("X", legal_response_bids_with_interference("1♣", "1♥"))
+
+    def test_legal_response_bids_with_interference_without_negative_double(self) -> None:
+        self.assertNotIn("X", legal_response_bids_with_interference("1♠", "2♣"))
 
 
 class RebidRecommendationTests(unittest.TestCase):

@@ -21,6 +21,8 @@ const defaultSettings = {
   splinter_enabled: true,
   responder_splinter_min_hcp: 11,
   responder_splinter_max_hcp: 15,
+  negative_double_enabled: true,
+  negative_double_min_hcp: 6,
   forcing_nt_label: '半逼叫',
   scoring_mode: 'IMP',
   respect_vulnerability: true,

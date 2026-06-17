@@ -62,6 +62,13 @@
     </view>
 
     <view class="field">
+      <view class="field-label">否定性加倍最低 HCP</view>
+      <picker mode="selector" range="{{negativeDoubleMinOptions}}" value="{{negativeDoubleMinIndex}}" bindchange="onNegativeDoubleMinChange">
+        <view class="picker-box">{{negativeDoubleMinOptions[negativeDoubleMinIndex]}}</view>
+      </picker>
+    </view>
+
+    <view class="field">
       <view class="field-label">高花开叫后 1NT 应叫</view>
       <picker mode="selector" range="{{forcingNtLabels}}" value="{{forcingNtLabelIndex}}" bindchange="onForcingNtLabelChange">
         <view class="picker-box">{{forcingNtLabels[forcingNtLabelIndex]}}</view>
@@ -90,6 +97,7 @@
     <view class="switch-row"><text>1NT 后启用 Jacoby Transfer</text><switch checked="{{settings.transfers_enabled}}" data-key="transfers_enabled" bindchange="onSwitchChange" /></view>
     <view class="switch-row"><text>高花后启用 Jacoby 2NT</text><switch checked="{{settings.jacoby_2nt_enabled}}" data-key="jacoby_2nt_enabled" bindchange="onSwitchChange" /></view>
     <view class="switch-row"><text>高花应叫启用 Bergen Raises（4张支持）</text><switch checked="{{settings.bergen_raises_enabled}}" data-key="bergen_raises_enabled" bindchange="onSwitchChange" /></view>
+    <view class="switch-row"><text>竞叫后启用否定性加倍</text><switch checked="{{settings.negative_double_enabled}}" data-key="negative_double_enabled" bindchange="onSwitchChange" /></view>
     <view class="switch-row"><text>按局况调整成局阈值</text><switch checked="{{settings.respect_vulnerability}}" data-key="respect_vulnerability" bindchange="onSwitchChange" /></view>
   </view>
 

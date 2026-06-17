@@ -185,6 +185,10 @@ def init_state() -> None:
         st.session_state.setting_responder_splinter_min_hcp = 11
     if "setting_responder_splinter_max_hcp" not in st.session_state:
         st.session_state.setting_responder_splinter_max_hcp = 15
+    if "setting_negative_double_enabled" not in st.session_state:
+        st.session_state.setting_negative_double_enabled = True
+    if "setting_negative_double_min_hcp" not in st.session_state:
+        st.session_state.setting_negative_double_min_hcp = 6
     if "setting_forcing_nt_label" not in st.session_state:
         st.session_state.setting_forcing_nt_label = "半逼叫"
     if "setting_scoring_mode" not in st.session_state:
@@ -249,6 +253,8 @@ def current_rule_settings() -> RuleSettings:
         "splinter_enabled": st.session_state.get("setting_splinter_enabled", True),
         "responder_splinter_min_hcp": st.session_state.get("setting_responder_splinter_min_hcp", 11),
         "responder_splinter_max_hcp": st.session_state.get("setting_responder_splinter_max_hcp", 15),
+        "negative_double_enabled": st.session_state.get("setting_negative_double_enabled", True),
+        "negative_double_min_hcp": st.session_state.get("setting_negative_double_min_hcp", 6),
         "forcing_nt_label": st.session_state.get("setting_forcing_nt_label", "半逼叫"),
         "scoring_mode": st.session_state.get("setting_scoring_mode", "IMP"),
         "respect_vulnerability": st.session_state.get("setting_respect_vulnerability", True),
@@ -371,6 +377,11 @@ def reset_rules() -> None:
     st.session_state.setting_responder_simple_raise_max = 9
     st.session_state.setting_responder_limit_raise_range = "10-12"
     st.session_state.setting_responder_bergen_weak_max = 9
+    st.session_state.setting_splinter_enabled = True
+    st.session_state.setting_responder_splinter_min_hcp = 11
+    st.session_state.setting_responder_splinter_max_hcp = 15
+    st.session_state.setting_negative_double_enabled = True
+    st.session_state.setting_negative_double_min_hcp = 6
     st.session_state.setting_forcing_nt_label = "半逼叫"
     st.session_state.setting_scoring_mode = "IMP"
     st.session_state.setting_respect_vulnerability = True
@@ -892,6 +903,17 @@ def render_stats() -> None:
             "Splinter 最大 HCP",
             [14, 15, 16],
             key="setting_responder_splinter_max_hcp",
+            on_change=change_rules,
+        )
+        st.checkbox(
+            "竞叫后启用否定性加倍（Negative Double）",
+            key="setting_negative_double_enabled",
+            on_change=change_rules,
+        )
+        st.selectbox(
+            "否定性加倍最低 HCP",
+            [6, 7, 8],
+            key="setting_negative_double_min_hcp",
             on_change=change_rules,
         )
         st.radio(

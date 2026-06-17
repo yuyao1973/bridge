@@ -31,6 +31,7 @@ OPENING_BIDS = [
 
 RESPONSE_BIDS = [
     "Pass",
+    "X",
     "1♦",
     "1♥",
     "1♠",
@@ -146,6 +147,8 @@ class RuleSettings:
     splinter_enabled: bool = True
     responder_splinter_min_hcp: int = 11
     responder_splinter_max_hcp: int = 15
+    negative_double_enabled: bool = True
+    negative_double_min_hcp: int = 6
 
 
 def default_rule_settings() -> RuleSettings:
@@ -243,11 +246,24 @@ def recommend_response(
     evaluation: HandEvaluation,
     settings: RuleSettings | None = None,
     vulnerability: str | None = None,
+    overcall_bid: str | None = None,
 ) -> BidRecommendation:
     settings = settings or default_rule_settings()
     hcp = evaluation.hcp
     lengths = evaluation.lengths
     length_text = describe_lengths(evaluation)
+
+    if overcall_bid and should_make_negative_double(opener_bid, overcall_bid, evaluation, settings):
+        target_majors = negative_double_target_majors(opener_bid, overcall_bid)
+        majors_text = " 或 ".join([suit_symbol(suit) for suit in target_majors]) if target_majors else "未叫高花"
+        return BidRecommendation(
+            "X",
+            (
+                f"同伴开 {opener_bid}，右手竞叫 {overcall_bid}。你有 {hcp} HCP，"
+                f"并持有 4 张以上 {majors_text}，按简化否定性加倍约定应叫 X。牌型：{length_text}。"
+            ),
+            "否定性加倍",
+        )
 
     if opener_bid == "1NT":
         return recommend_response_to_1nt(evaluation, settings, vulnerability)
@@ -277,7 +293,16 @@ def recommend_response(
 
 
 def legal_response_bids(opener_bid: str) -> list[str]:
-    return legal_bids_after(opener_bid, RESPONSE_BIDS)
+    return legal_response_bids_with_interference(opener_bid, None)
+
+
+def legal_response_bids_with_interference(opener_bid: str, overcall_bid: str | None) -> list[str]:
+    previous_bid = overcall_bid if overcall_bid else opener_bid
+    legal = legal_bids_after(previous_bid, RESPONSE_BIDS)
+    if overcall_bid and is_negative_double_available(opener_bid, overcall_bid):
+        if "X" not in legal:
+            legal.insert(1 if legal and legal[0] == "Pass" else 0, "X")
+    return legal
 
 
 def legal_rebid_bids(response_bid: str) -> list[str]:
@@ -318,6 +343,79 @@ def parse_contract_bid(bid: str) -> tuple[int, str] | None:
     if strain not in STRAIN_ORDER:
         return None
     return level, strain
+
+
+def is_negative_double_available(opener_bid: str, overcall_bid: str) -> bool:
+    opener_contract = parse_contract_bid(opener_bid)
+    overcall_contract = parse_contract_bid(overcall_bid)
+    if opener_contract is None or overcall_contract is None:
+        return False
+
+    opener_level, opener_strain = opener_contract
+    overcall_level, overcall_strain = overcall_contract
+
+    # 训练第3阶段先覆盖最常见的一阶开叫后一阶争叫的否定性加倍。
+    if opener_level != 1 or overcall_level != 1:
+        return False
+    if opener_strain not in {"♣", "♦", "♥"}:
+        return False
+    if overcall_strain not in {"♦", "♥", "♠"}:
+        return False
+    if STRAIN_ORDER[overcall_strain] <= STRAIN_ORDER[opener_strain]:
+        return False
+    return bool(negative_double_target_majors(opener_bid, overcall_bid))
+
+
+def negative_double_target_majors(opener_bid: str, overcall_bid: str) -> list[str]:
+    opener_contract = parse_contract_bid(opener_bid)
+    overcall_contract = parse_contract_bid(overcall_bid)
+    if opener_contract is None or overcall_contract is None:
+        return []
+
+    _, opener_strain = opener_contract
+    _, overcall_strain = overcall_contract
+
+    if opener_strain == "♣":
+        if overcall_strain == "♦":
+            return ["H", "S"]
+        if overcall_strain == "♥":
+            return ["S"]
+        if overcall_strain == "♠":
+            return ["H"]
+    if opener_strain == "♦":
+        if overcall_strain == "♥":
+            return ["S"]
+        if overcall_strain == "♠":
+            return ["H"]
+    if opener_strain == "♥" and overcall_strain == "♠":
+        # 1♥-(1♠)-X 常见为4+张低花，简化版以4+♦作为触发。
+        return ["D"]
+
+    return []
+
+
+def should_make_negative_double(
+    opener_bid: str,
+    overcall_bid: str,
+    evaluation: HandEvaluation,
+    settings: RuleSettings,
+) -> bool:
+    if not settings.negative_double_enabled:
+        return False
+    if evaluation.hcp < settings.negative_double_min_hcp:
+        return False
+    if not is_negative_double_available(opener_bid, overcall_bid):
+        return False
+
+    targets = negative_double_target_majors(opener_bid, overcall_bid)
+    if not targets:
+        return False
+
+    lengths = evaluation.lengths
+    for suit in targets:
+        if lengths[suit] >= 4:
+            return True
+    return False
 
 
 def recommend_opener_rebid(

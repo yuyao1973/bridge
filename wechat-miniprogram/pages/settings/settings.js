@@ -19,6 +19,8 @@ Page({
     limitRaiseIndex: 0,
     bergenWeakMaxOptions: [8, 9, 10],
     bergenWeakMaxIndex: 1,
+    negativeDoubleMinOptions: [6, 7, 8],
+    negativeDoubleMinIndex: 0,
     forcingNtLabels: ['半逼叫', '逼叫一轮'],
     forcingNtLabelIndex: 0,
     scoringModes: ['IMP', 'MP'],
@@ -46,6 +48,7 @@ Page({
       simpleRaiseMaxIndex: Math.max(0, this.data.simpleRaiseMaxOptions.indexOf(settings.responder_simple_raise_max ?? 9)),
       limitRaiseIndex: Math.max(0, this.data.limitRaiseRanges.indexOf(limitRaiseValue)),
       bergenWeakMaxIndex: Math.max(0, this.data.bergenWeakMaxOptions.indexOf(settings.responder_bergen_weak_max ?? 9)),
+      negativeDoubleMinIndex: Math.max(0, this.data.negativeDoubleMinOptions.indexOf(settings.negative_double_min_hcp ?? 6)),
       forcingNtLabelIndex: Math.max(0, this.data.forcingNtLabels.indexOf(settings.forcing_nt_label)),
       scoringModeIndex: Math.max(0, this.data.scoringModes.indexOf(settings.scoring_mode || 'IMP')),
       aggressivenessIndex: Math.max(0, this.data.aggressivenessOptions.indexOf(settings.game_aggressiveness ?? 0))
@@ -105,6 +108,12 @@ Page({
     const index = Number(event.detail.value)
     this.setData({ bergenWeakMaxIndex: index })
     this.updateSettings({ responder_bergen_weak_max: this.data.bergenWeakMaxOptions[index] })
+  },
+
+  onNegativeDoubleMinChange(event) {
+    const index = Number(event.detail.value)
+    this.setData({ negativeDoubleMinIndex: index })
+    this.updateSettings({ negative_double_min_hcp: this.data.negativeDoubleMinOptions[index] })
   },
 
   onForcingNtLabelChange(event) {

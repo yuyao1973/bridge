@@ -122,7 +122,7 @@ Python 后端 API
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-uvicorn api:app --host 0.0.0.0 --port 8000
+uvicorn api:app --host 0.0.0.0 --port 8001
 ```
 
 2. 使用微信开发者工具导入 `wechat-miniprogram`。

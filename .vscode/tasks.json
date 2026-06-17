@@ -14,7 +14,7 @@
       "label": "Run Mini Program API",
       "type": "shell",
       "command": ".\\.venv\\Scripts\\uvicorn.exe",
-      "args": ["api:app", "--host", "127.0.0.1", "--port", "8000"],
+      "args": ["api:app", "--host", "127.0.0.1", "--port", "8001"],
       "isBackground": true,
       "problemMatcher": [],
       "group": "build"

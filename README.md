@@ -126,10 +126,10 @@ streamlit run app.py
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-uvicorn api:app --host 0.0.0.0 --port 8000
+uvicorn api:app --host 0.0.0.0 --port 8001
 ```
 
-开发环境接口地址默认是 `http://127.0.0.1:8000`，配置在 `wechat-miniprogram/app.js`。
+开发环境接口地址默认是 `http://127.0.0.1:8001`，配置在 `wechat-miniprogram/app.js`。
 
 ## 运行微信小程序
 

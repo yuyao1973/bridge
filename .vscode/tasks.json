@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Streamlit app",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\streamlit.exe",
+      "args": ["run", "app.py"],
+      "isBackground": true,
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "Run Mini Program API",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\uvicorn.exe",
+      "args": ["api:app", "--host", "127.0.0.1", "--port", "8000"],
+      "isBackground": true,
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "Compile Python files",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "compileall", "."],
+      "problemMatcher": [],
+      "group": "test"
+    }
+  ]
+}

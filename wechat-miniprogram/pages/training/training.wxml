@@ -1,0 +1,83 @@
+<view class="container">
+  <view class="card top-card">
+    <view class="mode-title">{{modeText}}</view>
+    <view class="subtitle">已答 {{total}} 题，正确 {{correct}} 题，正确率 {{rate}}%</view>
+    <view class="build-meta practical-profile {{practicalProfileUpdated ? 'updated' : ''}}">实战参数 {{practicalProfile}}</view>
+    <view class="build-meta">版本 {{appVersion}} · 构建时间 {{buildTime}}</view>
+  </view>
+
+  <view wx:if="{{mode !== 'opening'}}" class="card">
+    <view class="field-label">开叫类别</view>
+    <picker mode="selector" range="{{openerCategoryOptions}}" value="{{openerCategoryIndex}}" bindchange="onOpenerCategoryChange">
+      <view class="picker-box">{{openerCategoryOptions[openerCategoryIndex]}}</view>
+    </picker>
+    <view class="field-label">开叫叫品</view>
+    <picker mode="selector" range="{{openerOptions}}" value="{{openerIndex}}" bindchange="onOpenerChange">
+      <view class="picker-box">{{openerOptions[openerIndex]}}</view>
+    </picker>
+  </view>
+
+  <view wx:if="{{loading}}" class="card">
+    <view class="subtitle">正在生成题目...</view>
+  </view>
+
+  <view wx:elif="{{question}}">
+    <view class="card">
+      <view class="info-row"><text class="info-label">局况</text><text>{{question.vulnerability}}</text></view>
+      <view class="info-row"><text class="info-label">位置</text><text>{{question.position}}</text></view>
+      <view wx:if="{{mode === 'response' && question.opener_bid}}" class="info-row"><text class="info-label">同伴开叫</text><text>{{question.opener_bid}}</text></view>
+      <view wx:if="{{mode === 'opener_rebid' && question.opener_bid}}" class="info-row"><text class="info-label">你的开叫</text><text>{{question.opener_bid}}</text></view>
+      <view wx:if="{{mode === 'responder_rebid' && question.opener_bid}}" class="info-row"><text class="info-label">开叫者开叫</text><text>{{question.opener_bid}}</text></view>
+      <view wx:if="{{question.response_bid && mode !== 'responder_rebid'}}" class="info-row"><text class="info-label">同伴应叫</text><text>{{question.response_bid}}</text></view>
+      <view wx:if="{{question.response_bid && mode === 'responder_rebid'}}" class="info-row"><text class="info-label">你的第一次应叫</text><text>{{question.response_bid}}</text></view>
+      <view wx:if="{{question.opener_rebid_bid}}" class="info-row"><text class="info-label">开叫者再叫</text><text>{{question.opener_rebid_bid}}</text></view>
+      <view class="auction">
+        <view class="auction-text">叫牌过程：</view>
+        <block wx:for="{{auctionBids}}" wx:key="position">
+          <view class="auction-bid {{item.strainClass}}" data-bid="{{item.bid}}" data-index="{{index}}" bindtap="showBidMeaning">{{item.bid}}</view>
+          <view class="auction-separator">-</view>
+        </block>
+        <view class="auction-text">?，轮到你叫牌。</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">你的手牌</view>
+      <view wx:for="{{question.hand_lines}}" wx:key="*this" class="hand-line">{{item}}</view>
+      <view class="metrics">
+        <view class="metric"><view class="metric-value">{{question.evaluation.hcp}}</view><view class="metric-label">HCP</view></view>
+        <view class="metric"><view class="metric-value">{{question.evaluation.shape}}</view><view class="metric-label">牌型</view></view>
+        <view class="metric"><view class="metric-value">{{question.evaluation.balanced ? '是' : '否'}}</view><view class="metric-label">均型</view></view>
+      </view>
+    </view>
+
+    <view class="card bid-card">
+      <view class="section-title">请选择叫品</view>
+      <view class="bid-grid {{bidGridClass}}">
+        <block wx:for="{{bidItems}}" wx:key="bid">
+          <view class="bid-cell">
+            <view wx:if="{{item.legal}}" class="bid-btn {{item.strainClass}} {{selectedBid === item.bid ? 'selected' : ''}} {{submitted ? 'locked' : ''}}" data-bid="{{item.bid}}" bindtap="selectBid">{{item.bid}}</view>
+            <view wx:else class="bid-disabled {{item.strainClass}}">✕ {{item.bid}}</view>
+          </view>
+        </block>
+      </view>
+      <view class="subtitle">当前选择：{{selectedBid}}</view>
+      <button class="primary-btn" disabled="{{submitted || !selectedBidLegal}}" bindtap="submitAnswer">提交答案</button>
+      <button class="secondary-btn" bindtap="loadQuestion">下一题</button>
+      <button class="secondary-btn" bindtap="showScoreStats">统计分数</button>
+      <button class="secondary-btn" bindtap="clearScoreStats">清空统计</button>
+    </view>
+
+    <view wx:if="{{submitted}}" class="card feedback {{answer.correct ? 'ok' : 'bad'}}">
+      <view class="section-title">{{feedbackTitle}}</view>
+      <view class="recommended-bid-row">推荐叫品：<view class="recommended-bid {{recommendedBidClass}}">{{answer.recommended_bid}}</view></view>
+      <view class="subtitle">{{answer.explanation}}</view>
+      <view class="rule-name">规则：{{answer.rule_name}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{error}}" class="card error-card">
+    <view>{{error}}</view>
+    <button class="secondary-btn" bindtap="loadQuestion">重试</button>
+  </view>
+</view>

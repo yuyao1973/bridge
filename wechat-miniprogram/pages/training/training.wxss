@@ -1,0 +1,308 @@
+.top-card {
+  background: linear-gradient(135deg, #0f5132, #198754);
+  color: #ffffff;
+}
+
+.mode-title {
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.build-meta {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  opacity: 0.9;
+}
+
+.practical-profile.updated {
+  color: #fff8b8;
+  text-shadow: 0 0 10rpx rgba(255, 248, 184, 0.45);
+  transition: all 0.25s ease;
+}
+
+.field-label,
+.section-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #0f5132;
+  margin-bottom: 16rpx;
+}
+
+.picker-box {
+  padding: 22rpx;
+  border-radius: 16rpx;
+  background: #f2f4f7;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8rpx 0;
+  font-size: 28rpx;
+}
+
+.info-label {
+  color: #667085;
+}
+
+.auction {
+  margin-top: 18rpx;
+  padding: 18rpx;
+  border-radius: 16rpx;
+  background: #f2f4f7;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.auction-text {
+  display: inline;
+  color: #475467;
+}
+
+.auction-bid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rpx 8rpx;
+  border-radius: 6rpx;
+  font-weight: 700;
+  font-size: 24rpx;
+  cursor: pointer;
+}
+
+.auction-bid:active {
+  opacity: 0.8;
+  transform: scale(0.95);
+}
+
+.auction-bid.bid-club {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.auction-bid.bid-diamond {
+  background: #fff4e5;
+  color: #b54708;
+}
+
+.auction-bid.bid-heart {
+  background: #fff1f3;
+  color: #c01048;
+}
+
+.auction-bid.bid-spade {
+  background: #f2f4f7;
+  color: #101828;
+}
+
+.auction-bid.bid-nt {
+  background: #f4f3ff;
+  color: #5925dc;
+}
+
+.auction-bid.bid-pass {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.auction-separator {
+  color: #98a2b3;
+}
+
+.hand-line {
+  font-size: 36rpx;
+  font-weight: 600;
+  padding: 10rpx 0;
+}
+
+.metrics {
+  display: flex;
+  gap: 14rpx;
+  margin-top: 20rpx;
+}
+
+.metric {
+  flex: 1;
+  padding: 18rpx;
+  border-radius: 16rpx;
+  background: #f2f4f7;
+  text-align: center;
+}
+
+.metric-value {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #0f5132;
+}
+
+.metric-label {
+  margin-top: 8rpx;
+  color: #667085;
+  font-size: 24rpx;
+}
+
+.bid-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  align-items: stretch;
+  margin-top: 8rpx;
+}
+
+.bid-card {
+  padding: 20rpx;
+}
+
+.bid-cell {
+  box-sizing: border-box;
+}
+
+.bid-grid.cols-4 .bid-cell {
+  width: 23.8%;
+}
+
+.bid-grid.cols-5 .bid-cell {
+  width: 18.9%;
+}
+
+.bid-grid.cols-6 .bid-cell {
+  width: 15.7%;
+}
+
+.bid-btn,
+.bid-disabled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52rpx;
+  padding: 0;
+  margin: 0;
+  border-radius: 10rpx;
+  text-align: center;
+  font-weight: 700;
+  font-size: 22rpx;
+  white-space: nowrap;
+}
+
+.bid-btn::after {
+  border: 0;
+}
+
+.bid-btn.selected {
+  background: #0f5132;
+  color: #ffffff;
+}
+
+.bid-btn.locked {
+  opacity: 0.55;
+}
+
+.bid-disabled {
+  opacity: 0.7;
+}
+
+.bid-club {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.bid-diamond {
+  background: #fff4e5;
+  color: #b54708;
+}
+
+.bid-heart {
+  background: #fff1f3;
+  color: #c01048;
+}
+
+.bid-spade {
+  background: #f2f4f7;
+  color: #101828;
+}
+
+.bid-nt {
+  background: #f4f3ff;
+  color: #5925dc;
+}
+
+.bid-pass {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.bid-disabled.bid-club,
+.bid-disabled.bid-diamond,
+.bid-disabled.bid-heart,
+.bid-disabled.bid-spade,
+.bid-disabled.bid-nt,
+.bid-disabled.bid-pass {
+  background: #f2f4f7;
+  color: #98a2b3;
+}
+
+.feedback.ok {
+  border-left: 10rpx solid #198754;
+}
+
+.feedback.bad,
+.error-card {
+  border-left: 10rpx solid #dc3545;
+}
+
+.rule-name {
+  margin-top: 14rpx;
+  color: #667085;
+  font-size: 24rpx;
+}
+
+.recommended-bid-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.recommended-bid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8rpx 14rpx;
+  border-radius: 8rpx;
+  font-weight: 700;
+  font-size: 24rpx;
+}
+
+.recommended-bid.bid-club {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.recommended-bid.bid-diamond {
+  background: #fff4e5;
+  color: #b54708;
+}
+
+.recommended-bid.bid-heart {
+  background: #fff1f3;
+  color: #c01048;
+}
+
+.recommended-bid.bid-spade {
+  background: #f2f4f7;
+  color: #101828;
+}
+
+.recommended-bid.bid-nt {
+  background: #f4f3ff;
+  color: #5925dc;
+}
+
+.recommended-bid.bid-pass {
+  background: #f2f4f7;
+  color: #475467;
+}

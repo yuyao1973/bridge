@@ -1,0 +1,10 @@
+.hero {
+  padding-top: 42rpx;
+  padding-bottom: 42rpx;
+}
+
+.section-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #0f5132;
+}

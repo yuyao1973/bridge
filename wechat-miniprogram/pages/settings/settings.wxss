@@ -1,0 +1,25 @@
+.field {
+  margin-bottom: 28rpx;
+}
+
+.field-label {
+  margin-bottom: 12rpx;
+  color: #0f5132;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.picker-box {
+  padding: 22rpx;
+  border-radius: 16rpx;
+  background: #f2f4f7;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #eef0f2;
+  font-size: 28rpx;
+}

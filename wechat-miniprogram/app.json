@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/training/training",
+    "pages/settings/settings"
+  ],
+  "window": {
+    "navigationBarTitleText": "桥牌叫牌训练",
+    "navigationBarBackgroundColor": "#0f5132",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f6f7f9"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

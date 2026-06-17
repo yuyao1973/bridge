@@ -1,0 +1,9 @@
+{
+  "desc": "Bridge bidding trainer sitemap",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}

@@ -209,6 +209,68 @@ class ResponseRecommendationTests(unittest.TestCase):
             "2♠",
         )
 
+    def test_bergen_weak_boundary_at_nine_hcp(self) -> None:
+        self.assertEqual(recommend_response("1♥", evaluation(9, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
+
+    def test_bergen_medium_boundary_at_ten_hcp(self) -> None:
+        self.assertEqual(recommend_response("1♠", evaluation(10, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♥")
+
+    def test_simple_raise_three_hearts_at_boundary_nine_hcp(self) -> None:
+        self.assertEqual(recommend_response("1♥", evaluation(9, 3, 3, 3, 4), vulnerability=VULNERABILITY).bid, "2♥")
+
+    def test_limit_raise_three_spades_at_boundary_ten_hcp(self) -> None:
+        self.assertEqual(recommend_response("1♠", evaluation(10, 3, 2, 3, 5), vulnerability=VULNERABILITY).bid, "3♠")
+
+    def test_four_hearts_support_six_hcp_bergen_weak(self) -> None:
+        self.assertEqual(recommend_response("1♥", evaluation(6, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
+
+    def test_four_spades_support_ten_hcp_bergen_medium(self) -> None:
+        self.assertEqual(recommend_response("1♠", evaluation(10, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♥")
+
+    def test_three_hearts_support_eleven_hcp_invite(self) -> None:
+        self.assertEqual(recommend_response("1♥", evaluation(11, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "3♥")
+
+    def test_custom_aggressive_simple_raise_max_eleven(self) -> None:
+        settings = RuleSettings(responder_simple_raise_max=11, responder_limit_raise_min=12, responder_limit_raise_max=12)
+        self.assertEqual(
+            recommend_response("1♥", evaluation(11, 3, 3, 4, 3), settings=settings, vulnerability=VULNERABILITY).bid,
+            "2♥",
+        )
+
+    def test_custom_conservative_limit_raise_min_nine(self) -> None:
+        settings = RuleSettings(responder_simple_raise_max=8, responder_limit_raise_min=9, responder_limit_raise_max=11)
+        self.assertEqual(
+            recommend_response("1♠", evaluation(9, 3, 2, 4, 4), settings=settings, vulnerability=VULNERABILITY).bid,
+            "3♠",
+        )
+
+    def test_multiple_four_card_suits_chooses_longest(self) -> None:
+        self.assertEqual(recommend_response("1♥", evaluation(8, 4, 4, 3, 2), vulnerability=VULNERABILITY).bid, "3♦")
+
+    def test_game_raise_hearts_thirteen_hcp_three_card_support(self) -> None:
+        self.assertEqual(recommend_response("1♥", evaluation(13, 3, 3, 3, 4), vulnerability=VULNERABILITY).bid, "4♥")
+
+    def test_game_raise_spades_fourteen_hcp_three_card_support(self) -> None:
+        self.assertEqual(recommend_response("1♠", evaluation(14, 3, 2, 4, 4), vulnerability=VULNERABILITY).bid, "4♠")
+
+    def test_jacoby_2nt_fourteen_hcp_four_card_hearts(self) -> None:
+        self.assertEqual(recommend_response("1♥", evaluation(14, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "2NT")
+
+    def test_jacoby_2nt_fifteen_hcp_four_card_spades(self) -> None:
+        self.assertEqual(recommend_response("1♠", evaluation(15, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "2NT")
+
+    def test_responder_five_card_hearts_support_over_spade_open(self) -> None:
+        self.assertEqual(recommend_response("1♠", evaluation(8, 2, 5, 3, 3, balanced=False), vulnerability=VULNERABILITY).bid, "1NT")
+
+    def test_responder_balanced_no_support_forces_one_nt(self) -> None:
+        self.assertEqual(recommend_response("1♠", evaluation(8, 3, 3, 3, 2), vulnerability=VULNERABILITY).bid, "2♠")
+
+    def test_responder_twelve_hcp_limit_raise_not_game(self) -> None:
+        self.assertEqual(recommend_response("1♥", evaluation(12, 3, 3, 3, 4), vulnerability=VULNERABILITY).bid, "3♥")
+
+    def test_responder_thirteen_hcp_game_not_limit_raise(self) -> None:
+        self.assertEqual(recommend_response("1♠", evaluation(13, 3, 2, 3, 5), vulnerability=VULNERABILITY).bid, "4♠")
+
 
 class RebidRecommendationTests(unittest.TestCase):
     def test_opener_rebid_supports_responder_major(self) -> None:

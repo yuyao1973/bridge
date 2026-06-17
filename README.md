@@ -43,7 +43,10 @@
 1. 对 1NT：Stayman、Jacoby Transfer、2NT 邀局、3NT 进局、Pass
 2. 对 1♥/1♠：按 CCBA 分档处理支持与进程
     - 3 张支持：2♥/2♠ 简单加叫（低限）、3♥/3♠ 邀局加叫（10-12 HCP）、4♥/4♠ 进局加叫（13+ HCP）
-    - 4 张支持：Jacoby 2NT（13+ HCP，进局逼叫支持）；启用 Bergen Raises 时，
+   - 4 张支持：
+      - Jacoby 2NT（13+ HCP，进局逼叫支持）
+      - Splinter 游牌加叫（11-15 HCP，某花色单张/void，用 3X 表示单张花色）
+      - Bergen Raises（启用时）：
        - 3♦/3♣（按开叫花色）表示 4 张支持且较弱（默认 6-9 HCP）
        - 3♠/3♥（按开叫花色）表示 4 张支持且中等（默认 10-12 HCP）
 3. 对 1♣/1♦：优先一阶叫 4 张高花；无高花时选择 1NT/2NT/3NT 或低花加叫
@@ -88,6 +91,9 @@
 - 1NT 后是否启用 Jacoby Transfer
 - 高花开叫后是否启用 Jacoby 2NT
 - 高花应叫后是否启用 Bergen Raises（4 张支持）
+- 高花应叫后是否启用 Splinter 游牌加叫（4 张支持，单张/void）
+- Splinter 最小 HCP（默认 11）：10、11、12
+- Splinter 最大 HCP（默认 15）：14、15、16
 - 2/1 进局逼叫最低 HCP：11、12、13
 - Bergen 弱支持上限 HCP（4 张支持）：8、9、10
 - 高花简单加叫上限 HCP（3 张支持）：8、9、10
@@ -149,6 +155,7 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 
 - 开叫推荐：强 2♣、2NT、1NT、高花、低花、弱二与 Pass
 - 应叫推荐：1NT 后 Stayman/转移/邀局/进局，高花开叫后 CCBA 分档支持（含 Bergen Raises）、2/1、1NT，应叫低花开叫后的高花/无将选择
+- Splinter 游牌加叫：单张/void 检测、HCP 范围限制、参数可自定义、禁用时回退到 Jacoby
 - 开叫者再叫与应叫者第二次应叫：一阶花色序列、无将再叫、长套重复与 1NT 后续序列
 - 1NT 开叫专项：Stayman、转移、2NT 邀局、Stayman 否定后的应叫者再叫分档
 - 训练题生成：按开叫叫品筛选，应叫/开叫者再叫/应叫者第二次应叫三类题目

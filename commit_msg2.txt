@@ -1,0 +1,26 @@
+feat: Add Splinter bid support to phase 2
+
+Implements Splinter convention for major suit responses:
+- 4-card support with singleton/void in another suit (11-15 HCP)
+- Adds find_splinter_suit() and get_splinter_bid() helper functions
+- Splinter prioritized before Jacoby 2NT for better hand representation
+- Extended RuleSettings with 3 new parameters (enabled, min/max HCP)
+- Integrated in Streamlit UI with sidebar controls
+- Integrated in WeChat Mini Program settings
+- Integrated in REST API with default values
+
+Test coverage:
+- 9 new Splinter test cases covering boundaries, disabled mode, parameter ranges
+- 64 ResponseRecommendationTests (up from 55), 125 total tests passing
+- All existing tests verified for backward compatibility
+
+Documentation:
+- Updated README with Splinter convention explanation
+- Added Splinter parameter documentation
+- Added test coverage description
+
+Splinter bid responses:
+- 1H: 3C (C singleton), 3D (D singleton), 3S (S singleton)
+- 1S: 3C (C singleton), 3D (D singleton), 3H (H singleton)
+- Customizable HCP range (default 11-15)
+- Configurable enable/disable per bidding style

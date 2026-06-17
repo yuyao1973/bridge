@@ -271,6 +271,54 @@ class ResponseRecommendationTests(unittest.TestCase):
     def test_responder_thirteen_hcp_game_not_limit_raise(self) -> None:
         self.assertEqual(recommend_response("1♠", evaluation(13, 3, 2, 3, 5), vulnerability=VULNERABILITY).bid, "4♠")
 
+    def test_splinter_hearts_club_singleton_thirteen_hcp(self) -> None:
+        # 1♥开叫，13 HCP，4张心支持，单张方块 -> 3♦ Splinter
+        self.assertEqual(recommend_response("1♥", evaluation(13, 3, 4, 1, 5), vulnerability=VULNERABILITY).bid, "3♦")
+
+    def test_splinter_spades_heart_singleton_twelve_hcp(self) -> None:
+        # 1♠开叫，12 HCP，4张黑桃支持，单张红心 -> 3♥ Splinter
+        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 1, 3, 5), vulnerability=VULNERABILITY).bid, "3♥")
+
+    def test_splinter_hearts_spade_void_fourteen_hcp(self) -> None:
+        # 1♥开叫，14 HCP，4张心支持，无黑桃（void） -> 3♠ Splinter
+        self.assertEqual(recommend_response("1♥", evaluation(14, 0, 4, 4, 5), vulnerability=VULNERABILITY).bid, "3♠")
+
+    def test_splinter_disabled_falls_back_to_jacoby(self) -> None:
+        # 禁用Splinter时，13+ HCP且4张支持应该用Jacoby 2NT
+        settings = RuleSettings(splinter_enabled=False)
+        self.assertEqual(
+            recommend_response("1♥", evaluation(13, 3, 4, 1, 5), settings=settings, vulnerability=VULNERABILITY).bid,
+            "2NT",
+        )
+
+    def test_splinter_below_min_hcp_uses_bergen_medium(self) -> None:
+        # 10 HCP，4张支持，单张方块，但低于Splinter最小HCP(11) -> Bergen中等支持3♠
+        settings = RuleSettings(responder_splinter_min_hcp=11)
+        self.assertEqual(
+            recommend_response("1♥", evaluation(10, 3, 4, 1, 5), settings=settings, vulnerability=VULNERABILITY).bid,
+            "3♠",  # Bergen medium support (10-12 HCP), other major
+        )
+
+    def test_splinter_above_max_hcp_uses_jacoby(self) -> None:
+        # 16 HCP，4张支持，单张方块，但高于Splinter最大HCP(15) -> 不符合Splinter，但符合Jacoby
+        settings = RuleSettings(responder_splinter_max_hcp=15)
+        self.assertEqual(
+            recommend_response("1♥", evaluation(16, 3, 4, 1, 5), settings=settings, vulnerability=VULNERABILITY).bid,
+            "2NT",  # Falls back to Jacoby 2NT since HCP too high for Splinter
+        )
+
+    def test_splinter_requires_singleton_void(self) -> None:
+        # 12 HCP，4张支持，但没有单张/void -> 应该是Bergen中等支持3♥
+        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♥")
+
+    def test_splinter_diamond_singleton_with_hearts(self) -> None:
+        # 1♥开叫，11 HCP，4张心支持，单张方块（最小Splinter） -> 3♦
+        self.assertEqual(recommend_response("1♥", evaluation(11, 3, 4, 1, 5), vulnerability=VULNERABILITY).bid, "3♦")
+
+    def test_splinter_club_singleton_with_spades(self) -> None:
+        # 1♠开叫，13 HCP，4张黑桃支持，单张方块 -> 3♦ Splinter
+        self.assertEqual(recommend_response("1♠", evaluation(13, 4, 3, 1, 5), vulnerability=VULNERABILITY).bid, "3♦")
+
 
 class RebidRecommendationTests(unittest.TestCase):
     def test_opener_rebid_supports_responder_major(self) -> None:

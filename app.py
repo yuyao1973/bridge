@@ -179,6 +179,12 @@ def init_state() -> None:
         st.session_state.setting_responder_limit_raise_range = "10-12"
     if "setting_responder_bergen_weak_max" not in st.session_state:
         st.session_state.setting_responder_bergen_weak_max = 9
+    if "setting_splinter_enabled" not in st.session_state:
+        st.session_state.setting_splinter_enabled = True
+    if "setting_responder_splinter_min_hcp" not in st.session_state:
+        st.session_state.setting_responder_splinter_min_hcp = 11
+    if "setting_responder_splinter_max_hcp" not in st.session_state:
+        st.session_state.setting_responder_splinter_max_hcp = 15
     if "setting_forcing_nt_label" not in st.session_state:
         st.session_state.setting_forcing_nt_label = "半逼叫"
     if "setting_scoring_mode" not in st.session_state:
@@ -240,6 +246,9 @@ def current_rule_settings() -> RuleSettings:
         "responder_limit_raise_min": responder_limit_min,
         "responder_limit_raise_max": responder_limit_max,
         "responder_bergen_weak_max": st.session_state.get("setting_responder_bergen_weak_max", 9),
+        "splinter_enabled": st.session_state.get("setting_splinter_enabled", True),
+        "responder_splinter_min_hcp": st.session_state.get("setting_responder_splinter_min_hcp", 11),
+        "responder_splinter_max_hcp": st.session_state.get("setting_responder_splinter_max_hcp", 15),
         "forcing_nt_label": st.session_state.get("setting_forcing_nt_label", "半逼叫"),
         "scoring_mode": st.session_state.get("setting_scoring_mode", "IMP"),
         "respect_vulnerability": st.session_state.get("setting_respect_vulnerability", True),
@@ -866,6 +875,23 @@ def render_stats() -> None:
             "高花开叫后 1NT 应叫 HCP 范围",
             ["5-11", "6-10", "6-11", "7-11", "6-12"],
             key="setting_forcing_nt_hcp_range",
+            on_change=change_rules,
+        )
+        st.checkbox(
+            "高花应叫启用 Splinter（游牌加叫）",
+            key="setting_splinter_enabled",
+            on_change=change_rules,
+        )
+        st.selectbox(
+            "Splinter 最小 HCP",
+            [10, 11, 12],
+            key="setting_responder_splinter_min_hcp",
+            on_change=change_rules,
+        )
+        st.selectbox(
+            "Splinter 最大 HCP",
+            [14, 15, 16],
+            key="setting_responder_splinter_max_hcp",
             on_change=change_rules,
         )
         st.radio(

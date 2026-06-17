@@ -143,6 +143,9 @@ class RuleSettings:
     responder_limit_raise_max: int = 12
     bergen_raises_enabled: bool = True
     responder_bergen_weak_max: int = 9
+    splinter_enabled: bool = True
+    responder_splinter_min_hcp: int = 11
+    responder_splinter_max_hcp: int = 15
 
 
 def default_rule_settings() -> RuleSettings:
@@ -822,6 +825,73 @@ def recommend_response_to_2nt(
     )
 
 
+def find_splinter_suit(
+    major: str,
+    lengths: dict[str, int],
+) -> str | None:
+    """检测是否存在splinter（对主花有4+支持，某花色1张或0张）。
+    
+    Args:
+        major: 主花色 ("H" 或 "S")
+        lengths: 各花色长度字典
+        
+    Returns:
+        splinter所在花色代码，如果没有则返回None
+    """
+    if lengths[major] < 4:
+        return None
+    
+    for suit in ["S", "H", "D", "C"]:
+        if suit != major and lengths[suit] <= 1:  # 单张或void
+            return suit
+    
+    return None
+
+
+def get_splinter_bid(major: str, splinter_suit: str) -> str:
+    """获取splinter的叫品。
+    
+    Splinter规则：
+    - 1♥开叫后，如果在♠有单张/void，叫3♠
+    - 1♥开叫后，如果在♣有单张/void，叫3♣
+    - 1♥开叫后，如果在♦有单张/void，叫3♦
+    - 1♠开叫后，如果在♥有单张/void，叫3♥
+    - 1♠开叫后，如果在♣有单张/void，叫3♣
+    - 1♠开叫后，如果在♦有单张/void，叫3♦
+    
+    Args:
+        major: 主花色 ("H" 或 "S")
+        splinter_suit: splinter所在花色 ("S", "H", "D", "C")
+        
+    Returns:
+        splinter叫品，如 "3♠", "3♣" 等
+    """
+    return f"3{suit_symbol(splinter_suit)}"
+
+
+def find_splinter_suit(
+    major: str,
+    lengths: dict[str, int],
+) -> str | None:
+    """检测是否存在splinter（对主花有4+支持，某花色1张或0张）。
+    
+    Args:
+        major: 主花色 ("H" 或 "S")
+        lengths: 各花色长度字典
+        
+    Returns:
+        splinter所在花色代码，如果没有则返回None
+    """
+    if lengths[major] < 4:
+        return None
+    
+    for suit in ["S", "H", "D", "C"]:
+        if suit != major and lengths[suit] <= 1:  # 单张或void
+            return suit
+    
+    return None
+
+
 def recommend_response_to_major(
     major: str,
     evaluation: HandEvaluation,
@@ -840,12 +910,26 @@ def recommend_response_to_major(
     simple_low = max(5, 6 + game_adjustment)
     simple_high = invite_low - 1
 
+    # Splinter检测：4张支持，11-15 HCP，某花色单张或void
+    # Splinter优先于Jacoby 2NT，因为牌型更特殊
+    if settings.splinter_enabled and lengths[major] >= 4:
+        splinter_suit = find_splinter_suit(major, lengths)
+        if splinter_suit is not None and settings.responder_splinter_min_hcp <= hcp <= settings.responder_splinter_max_hcp:
+            splinter_bid = get_splinter_bid(major, splinter_suit)
+            splinter_suit_name = SUIT_NAMES[splinter_suit]
+            return BidRecommendation(
+                splinter_bid,
+                f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。牌型特殊：{splinter_suit_name}花单张/void。使用Splinter叫 {splinter_bid} 表示游牌加叫。牌型：{length_text}。",
+                "Splinter游牌加叫",
+            )
+    
     if settings.jacoby_2nt_enabled and lengths[major] >= 4 and hcp >= game_hcp:
         return BidRecommendation(
             "2NT",
             f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张以上支持。简化 2/1 体系用 2NT Jacoby 表示进局逼叫支持。牌型：{length_text}。",
             "Jacoby 2NT 支持",
         )
+    
     if settings.bergen_raises_enabled and lengths[major] >= 4 and hcp <= settings.responder_bergen_weak_max:
         other_minor = "♦" if major == "H" else "♣"
         return BidRecommendation(

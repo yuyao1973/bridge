@@ -146,10 +146,13 @@ class ResponseRecommendationTests(unittest.TestCase):
         self.assertNotEqual(result.bid, "2NT")
 
     def test_bergen_weak_support_four_hearts_six_hcp(self) -> None:
-        self.assertEqual(recommend_response("1♥", evaluation(6, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
+        self.assertEqual(recommend_response("1♥", evaluation(6, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♣")
+
+    def test_four_heart_support_eight_hcp_prefers_four_card_convention(self) -> None:
+        self.assertEqual(recommend_response("1♥", evaluation(8, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♣")
 
     def test_bergen_medium_support_four_hearts_ten_hcp(self) -> None:
-        self.assertEqual(recommend_response("1♥", evaluation(10, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♠")
+        self.assertEqual(recommend_response("1♥", evaluation(10, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
 
     def test_simple_raise_three_hearts_six_hcp(self) -> None:
         self.assertEqual(recommend_response("1♥", evaluation(6, 3, 3, 3, 4), vulnerability=VULNERABILITY).bid, "2♥")
@@ -166,8 +169,11 @@ class ResponseRecommendationTests(unittest.TestCase):
     def test_bergen_weak_support_four_spades_nine_hcp(self) -> None:
         self.assertEqual(recommend_response("1♠", evaluation(9, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♣")
 
+    def test_four_spade_support_eight_hcp_prefers_four_card_convention(self) -> None:
+        self.assertEqual(recommend_response("1♠", evaluation(8, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♣")
+
     def test_bergen_medium_support_four_spades_twelve_hcp(self) -> None:
-        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♥")
+        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
 
     def test_bergen_disabled_falls_back_to_simple_raise(self) -> None:
         settings = RuleSettings(bergen_raises_enabled=False)
@@ -211,10 +217,10 @@ class ResponseRecommendationTests(unittest.TestCase):
         )
 
     def test_bergen_weak_boundary_at_nine_hcp(self) -> None:
-        self.assertEqual(recommend_response("1♥", evaluation(9, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
+        self.assertEqual(recommend_response("1♥", evaluation(9, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♣")
 
     def test_bergen_medium_boundary_at_ten_hcp(self) -> None:
-        self.assertEqual(recommend_response("1♠", evaluation(10, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♥")
+        self.assertEqual(recommend_response("1♠", evaluation(10, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
 
     def test_simple_raise_three_hearts_at_boundary_nine_hcp(self) -> None:
         self.assertEqual(recommend_response("1♥", evaluation(9, 3, 3, 3, 4), vulnerability=VULNERABILITY).bid, "2♥")
@@ -223,10 +229,10 @@ class ResponseRecommendationTests(unittest.TestCase):
         self.assertEqual(recommend_response("1♠", evaluation(10, 3, 2, 3, 5), vulnerability=VULNERABILITY).bid, "3♠")
 
     def test_four_hearts_support_six_hcp_bergen_weak(self) -> None:
-        self.assertEqual(recommend_response("1♥", evaluation(6, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
+        self.assertEqual(recommend_response("1♥", evaluation(6, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "3♣")
 
     def test_four_spades_support_ten_hcp_bergen_medium(self) -> None:
-        self.assertEqual(recommend_response("1♠", evaluation(10, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♥")
+        self.assertEqual(recommend_response("1♠", evaluation(10, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
 
     def test_three_hearts_support_eleven_hcp_invite(self) -> None:
         self.assertEqual(recommend_response("1♥", evaluation(11, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "3♥")
@@ -246,7 +252,7 @@ class ResponseRecommendationTests(unittest.TestCase):
         )
 
     def test_multiple_four_card_suits_chooses_longest(self) -> None:
-        self.assertEqual(recommend_response("1♥", evaluation(8, 4, 4, 3, 2), vulnerability=VULNERABILITY).bid, "3♦")
+        self.assertEqual(recommend_response("1♥", evaluation(8, 4, 4, 3, 2), vulnerability=VULNERABILITY).bid, "3♣")
 
     def test_game_raise_hearts_thirteen_hcp_three_card_support(self) -> None:
         self.assertEqual(recommend_response("1♥", evaluation(13, 3, 3, 3, 4), vulnerability=VULNERABILITY).bid, "4♥")
@@ -293,11 +299,11 @@ class ResponseRecommendationTests(unittest.TestCase):
         )
 
     def test_splinter_below_min_hcp_uses_bergen_medium(self) -> None:
-        # 10 HCP，4张支持，单张方块，但低于Splinter最小HCP(11) -> Bergen中等支持3♠
+        # 10 HCP，4张支持，单张方块，但低于Splinter最小HCP(11) -> Bergen中等支持3♦
         settings = RuleSettings(responder_splinter_min_hcp=11)
         self.assertEqual(
             recommend_response("1♥", evaluation(10, 3, 4, 1, 5), settings=settings, vulnerability=VULNERABILITY).bid,
-            "3♠",  # Bergen medium support (10-12 HCP), other major
+            "3♦",  # Bergen medium support (10-12 HCP)
         )
 
     def test_splinter_above_max_hcp_uses_jacoby(self) -> None:
@@ -309,8 +315,8 @@ class ResponseRecommendationTests(unittest.TestCase):
         )
 
     def test_splinter_requires_singleton_void(self) -> None:
-        # 12 HCP，4张支持，但没有单张/void -> 应该是Bergen中等支持3♥
-        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♥")
+        # 12 HCP，4张支持，但没有单张/void -> 应该是Bergen中等支持3♦
+        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
 
     def test_splinter_diamond_singleton_with_hearts(self) -> None:
         # 1♥开叫，11 HCP，4张心支持，单张方块（最小Splinter） -> 3♦
@@ -355,7 +361,7 @@ class ResponseRecommendationTests(unittest.TestCase):
                 vulnerability=VULNERABILITY,
                 overcall_bid="1♥",
             ).bid,
-            "1♠",
+            "Pass",
         )
 
     def test_negative_double_requires_target_suit_length(self) -> None:

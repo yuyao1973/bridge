@@ -321,6 +321,13 @@ def build_acceptable_bids(
             add_if_legal("2NT")
             add_if_legal("3NT")
 
+        # 兼容常见 Bergen 记号差异：部分体系用 1♥-3♣ 表示弱加叫。
+        # 为减少训练误判，主推为弱 Bergen 时同时接受 3♣/3♦ 两种写法。
+        if opener_bid == "1♥" and recommended_bid in {"3♦", "3♣"}:
+            add_if_legal("3♣")
+            add_if_legal("3♦")
+            add_if_legal("2♥")
+
         if opener_contract and opener_contract[1] in {"♥", "♠"} and rec_strain == opener_contract[1]:
             add_if_legal(f"{max(2, rec_level - 1)}{rec_strain}")
             add_if_legal(f"{min(4, rec_level + 1)}{rec_strain}")

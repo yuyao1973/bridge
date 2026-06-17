@@ -40,6 +40,11 @@ class AcceptableBidTests(unittest.TestCase):
         self.assertIn("3♥", bids)
         self.assertIn("4♥", bids)
 
+    def test_response_bergen_weak_over_one_heart_accepts_three_club_alias(self) -> None:
+        bids = build_acceptable_bids("3♣", ["Pass", "2♥", "3♣", "3♦", "3♥", "4♥"], mode="response", opener_bid="1♥")
+        self.assertIn("2♥", bids)
+        self.assertIn("3♣", bids)
+
     def test_pass_has_no_extra_acceptable_bid(self) -> None:
         self.assertEqual(build_acceptable_bids("Pass", ["Pass", "1♣"], mode="opening"), ["Pass"])
 

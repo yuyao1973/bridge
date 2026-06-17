@@ -1007,10 +1007,11 @@ def recommend_response_to_major(
     invite_high = game_hcp - 1
     simple_low = max(5, 6 + game_adjustment)
     simple_high = invite_low - 1
+    has_four_card_support = lengths[major] >= 4
 
-    # Splinter检测：4张支持，11-15 HCP，某花色单张或void
-    # Splinter优先于Jacoby 2NT，因为牌型更特殊
-    if settings.splinter_enabled and lengths[major] >= 4:
+    # 4张将牌支持优先：先处理4张支持约定，再退化到3张支持加叫。
+    # Splinter优先于Jacoby 2NT，因为牌型更特殊。
+    if settings.splinter_enabled and has_four_card_support:
         splinter_suit = find_splinter_suit(major, lengths)
         if splinter_suit is not None and settings.responder_splinter_min_hcp <= hcp <= settings.responder_splinter_max_hcp:
             splinter_bid = get_splinter_bid(major, splinter_suit)
@@ -1021,26 +1022,27 @@ def recommend_response_to_major(
                 "Splinter游牌加叫",
             )
     
-    if settings.jacoby_2nt_enabled and lengths[major] >= 4 and hcp >= game_hcp:
+    if settings.jacoby_2nt_enabled and has_four_card_support and hcp >= game_hcp:
         return BidRecommendation(
             "2NT",
             f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张以上支持。简化 2/1 体系用 2NT Jacoby 表示进局逼叫支持。牌型：{length_text}。",
             "Jacoby 2NT 支持",
         )
     
-    if settings.bergen_raises_enabled and lengths[major] >= 4 and hcp <= settings.responder_bergen_weak_max:
-        other_minor = "♦" if major == "H" else "♣"
+    if settings.bergen_raises_enabled and has_four_card_support and hcp <= settings.responder_bergen_weak_max:
+        # 本项目训练约定：一阶高花开叫后，弱 Bergen 统一用 3♣ 表达 4 张支持弱牌型。
+        weak_bergen_bid = "3♣"
         return BidRecommendation(
-            f"3{other_minor}",
-            f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。按 CCBA Bergen Raises，3{other_minor} 表示 4 张支持且点数较弱（6-9 HCP）。牌型：{length_text}。",
+            weak_bergen_bid,
+            f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。按 CCBA Bergen Raises，{weak_bergen_bid} 表示 4 张支持且点数较弱（6-9 HCP）。牌型：{length_text}。",
             "Bergen 弱支持 (4张)",
         )
 
-    if settings.bergen_raises_enabled and lengths[major] >= 4 and settings.responder_simple_raise_max < hcp <= settings.responder_limit_raise_max:
-        other_major = "♠" if major == "H" else "♥"
+    if settings.bergen_raises_enabled and has_four_card_support and settings.responder_simple_raise_max < hcp <= settings.responder_limit_raise_max:
+        medium_bergen_bid = "3♦"
         return BidRecommendation(
-            f"3{other_major}",
-            f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。按 CCBA Bergen Raises，3{other_major} 表示 4 张支持且点数中等（10-12 HCP）。牌型：{length_text}。",
+            medium_bergen_bid,
+            f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。按 CCBA Bergen Raises，{medium_bergen_bid} 表示 4 张支持且点数中等（10-12 HCP）。牌型：{length_text}。",
             "Bergen 中等支持 (4张)",
         )
 

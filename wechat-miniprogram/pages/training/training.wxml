@@ -15,6 +15,18 @@
     <picker mode="selector" range="{{openerOptions}}" value="{{openerIndex}}" bindchange="onOpenerChange">
       <view class="picker-box">{{openerOptions[openerIndex]}}</view>
     </picker>
+    <view wx:if="{{mode === 'opener_rebid' || mode === 'responder_rebid'}}">
+      <view class="field-label">应叫叫品</view>
+      <picker mode="selector" range="{{responseBidOptions}}" value="{{responseBidIndex}}" bindchange="onResponseBidChange">
+        <view class="picker-box">{{responseBidOptions[responseBidIndex]}}</view>
+      </picker>
+    </view>
+    <view wx:if="{{mode === 'responder_rebid'}}">
+      <view class="field-label">开叫者再叫叫品</view>
+      <picker mode="selector" range="{{openerRebidBidOptions}}" value="{{openerRebidBidIndex}}" bindchange="onOpenerRebidBidChange">
+        <view class="picker-box">{{openerRebidBidOptions[openerRebidBidIndex]}}</view>
+      </picker>
+    </view>
   </view>
 
   <view wx:if="{{loading}}" class="card">

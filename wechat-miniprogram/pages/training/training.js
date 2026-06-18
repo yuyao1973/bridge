@@ -9,6 +9,38 @@ const OPENER_BIDS_BY_CATEGORY = {
   '阻击叫': ['随机', '2♦', '2♥', '2♠', '3♣', '3♦', '3♥', '3♠', '4♣', '4♦', '4♥', '4♠', '5♣', '5♦']
 }
 
+const STRAIN_ORDER = { '♣': 1, '♦': 2, '♥': 3, '♠': 4, 'NT': 5 }
+const RESPONSE_BIDS = ['Pass', 'X', '1♦', '1♥', '1♠', '1NT', '2♣', '2♦', '2♥', '2♠', '2NT', '3♣', '3♦', '3♥', '3♠', '3NT', '4♥', '4♠', '5♣', '5♦']
+const REBID_BIDS = ['Pass', '1♣', '1♦', '1♥', '1♠', '1NT', '2♣', '2♦', '2♥', '2♠', '2NT', '3♣', '3♦', '3♥', '3♠', '3NT', '4♣', '4♦', '4♥', '4♠', '4NT', '5♣', '5♦', '5♥', '5♠', '5NT']
+
+function parseContractBid(bid) {
+  if (!bid || bid.length < 2 || !/^\d/.test(bid)) return null
+  const level = Number(bid[0])
+  const strain = bid.slice(1)
+  if (!(strain in STRAIN_ORDER)) return null
+  return { level, strain }
+}
+
+function isLegalBidAfter(prevBid, bid) {
+  if (bid === 'Pass') return true
+  const prev = parseContractBid(prevBid)
+  const next = parseContractBid(bid)
+  if (!prev || !next) return false
+  if (next.level > prev.level) return true
+  if (next.level === prev.level) return STRAIN_ORDER[next.strain] > STRAIN_ORDER[prev.strain]
+  return false
+}
+
+function legalResponseBidsForOpener(openerBid) {
+  if (!openerBid || openerBid === '随机') return ['随机']
+  return ['随机', ...RESPONSE_BIDS.filter(b => isLegalBidAfter(openerBid, b))]
+}
+
+function legalRebidBidsForResponse(responseBid) {
+  if (!responseBid || responseBid === '随机') return ['随机']
+  return ['随机', ...REBID_BIDS.filter(b => isLegalBidAfter(responseBid, b))]
+}
+
 Page({
   data: {
     mode: 'opening',
@@ -17,6 +49,10 @@ Page({
     openerCategoryIndex: 0,
     openerOptions: ['随机', '1♣', '1♦', '1♥', '1♠', '1NT'],
     openerIndex: 0,
+    responseBidOptions: ['随机'],
+    responseBidIndex: 0,
+    openerRebidBidOptions: ['随机'],
+    openerRebidBidIndex: 0,
     question: null,
     bidItems: [],
     bidGridClass: 'cols-4',
@@ -55,6 +91,10 @@ Page({
       openerCategoryIndex,
       openerOptions,
       openerIndex: 0,
+      responseBidOptions: ['随机'],
+      responseBidIndex: 0,
+      openerRebidBidOptions: ['随机'],
+      openerRebidBidIndex: 0,
       total: modeStats.total,
       correct: modeStats.correct,
       rate: modeRate,
@@ -230,7 +270,16 @@ Page({
   },
 
   onOpenerChange(event) {
-    this.setData({ openerIndex: Number(event.detail.value) })
+    const openerIndex = Number(event.detail.value)
+    const openerBid = this.data.openerOptions[openerIndex]
+    const responseBidOptions = legalResponseBidsForOpener(openerBid)
+    this.setData({
+      openerIndex,
+      responseBidOptions,
+      responseBidIndex: 0,
+      openerRebidBidOptions: ['随机'],
+      openerRebidBidIndex: 0,
+    })
     this.loadQuestion()
   },
 
@@ -240,8 +289,29 @@ Page({
     this.setData({
       openerCategoryIndex,
       openerOptions: this.getOpenerOptions(this.data.mode, category),
-      openerIndex: 0
+      openerIndex: 0,
+      responseBidOptions: ['随机'],
+      responseBidIndex: 0,
+      openerRebidBidOptions: ['随机'],
+      openerRebidBidIndex: 0,
     })
+    this.loadQuestion()
+  },
+
+  onResponseBidChange(event) {
+    const responseBidIndex = Number(event.detail.value)
+    const responseBid = this.data.responseBidOptions[responseBidIndex]
+    const openerRebidBidOptions = legalRebidBidsForResponse(responseBid)
+    this.setData({
+      responseBidIndex,
+      openerRebidBidOptions,
+      openerRebidBidIndex: 0,
+    })
+    this.loadQuestion()
+  },
+
+  onOpenerRebidBidChange(event) {
+    this.setData({ openerRebidBidIndex: Number(event.detail.value) })
     this.loadQuestion()
   },
 
@@ -264,10 +334,14 @@ Page({
     try {
       const opener = this.data.openerOptions[this.data.openerIndex] || '随机'
       const openerCategory = this.data.openerCategoryOptions[this.data.openerCategoryIndex] || null
+      const responseBid = this.data.responseBidOptions[this.data.responseBidIndex] || '随机'
+      const openerRebidBid = this.data.openerRebidBidOptions[this.data.openerRebidBidIndex] || '随机'
       const question = await api.createQuestion({
         mode: this.data.mode,
         opener_bid: opener === '随机' ? null : opener,
         opener_category: this.data.mode === 'opening' ? null : openerCategory,
+        response_bid: responseBid === '随机' ? null : responseBid,
+        opener_rebid_bid: openerRebidBid === '随机' ? null : openerRebidBid,
         settings: loadSettings()
       })
       const bidItems = question.choices.map((bid) => ({

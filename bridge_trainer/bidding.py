@@ -923,29 +923,6 @@ def recommend_response_to_2nt(
     )
 
 
-def find_splinter_suit(
-    major: str,
-    lengths: dict[str, int],
-) -> str | None:
-    """检测是否存在splinter（对主花有4+支持，某花色1张或0张）。
-    
-    Args:
-        major: 主花色 ("H" 或 "S")
-        lengths: 各花色长度字典
-        
-    Returns:
-        splinter所在花色代码，如果没有则返回None
-    """
-    if lengths[major] < 4:
-        return None
-    
-    for suit in ["S", "H", "D", "C"]:
-        if suit != major and lengths[suit] <= 1:  # 单张或void
-            return suit
-    
-    return None
-
-
 def get_splinter_bid(major: str, splinter_suit: str) -> str:
     """获取splinter的叫品。
     

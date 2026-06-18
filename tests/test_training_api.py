@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from unittest.mock import patch
 
 from api import check_answer, create_question, health, question_to_payload, settings_from_payload
 from bridge_trainer.bidding import BidRecommendation, RuleSettings
@@ -32,6 +33,11 @@ class AcceptableBidTests(unittest.TestCase):
         self.assertIn("1♥", bids)
         self.assertIn("1♠", bids)
 
+    def test_opening_nt_band_accepts_two_nt_and_three_nt(self) -> None:
+        bids = build_acceptable_bids("2NT", ["Pass", "2NT", "3NT"], mode="opening")
+        self.assertIn("2NT", bids)
+        self.assertIn("3NT", bids)
+
     def test_response_to_one_nt_accepts_two_nt_and_three_nt_band(self) -> None:
         bids = build_acceptable_bids("3NT", ["Pass", "2NT", "3NT"], mode="response", opener_bid="1NT")
         self.assertEqual(bids, ["3NT", "2NT"])
@@ -49,6 +55,9 @@ class AcceptableBidTests(unittest.TestCase):
 
     def test_pass_has_no_extra_acceptable_bid(self) -> None:
         self.assertEqual(build_acceptable_bids("Pass", ["Pass", "1♣"], mode="opening"), ["Pass"])
+
+    def test_pass_recommended_without_pass_in_legal_choices_still_returns_pass(self) -> None:
+        self.assertEqual(build_acceptable_bids("Pass", ["1♣"], mode="opening"), ["Pass"])
 
     def test_non_contract_recommended_bid_returns_itself(self) -> None:
         self.assertEqual(build_acceptable_bids("X", ["Pass", "X"], mode="response"), ["X"])
@@ -89,6 +98,11 @@ class AcceptableBidTests(unittest.TestCase):
         bids = build_acceptable_bids("3NT", ["Pass", "2NT", "3NT"], mode="opener_rebid")
         self.assertEqual(bids, ["3NT", "2NT"])
 
+    def test_opener_rebid_three_nt_with_nt_response_contract(self) -> None:
+        bids = build_acceptable_bids("3NT", ["Pass", "2NT", "3NT", "4NT"], mode="opener_rebid", response_bid="2NT")
+        self.assertIn("2NT", bids)
+        self.assertIn("3NT", bids)
+
     def test_opener_rebid_same_strain_adds_adjacent_levels(self) -> None:
         bids = build_acceptable_bids(
             "3♥",
@@ -98,8 +112,17 @@ class AcceptableBidTests(unittest.TestCase):
             opener_bid="1♥",
         )
         self.assertIn("2♥", bids)
-        self.assertIn("3♥", bids)
-        self.assertIn("4♥", bids)
+
+    def test_responder_rebid_nt_with_response_nt_contract(self) -> None:
+        bids = build_acceptable_bids(
+            "3NT",
+            ["Pass", "2NT", "3NT", "4NT"],
+            mode="responder_rebid",
+            response_bid="2NT",
+            opener_rebid_bid="2NT",
+        )
+        self.assertIn("2NT", bids)
+        self.assertIn("3NT", bids)
 
     def test_responder_rebid_same_as_opener_rebid_suit_adds_adjacent(self) -> None:
         bids = build_acceptable_bids(
@@ -111,6 +134,11 @@ class AcceptableBidTests(unittest.TestCase):
         self.assertIn("2♦", bids)
         self.assertIn("3♦", bids)
         self.assertIn("4♦", bids)
+
+    def test_neighbors_skip_non_contract_choices(self) -> None:
+        bids = build_acceptable_bids("2NT", ["Pass", "2NT", "X", "3NT"], mode="response")
+        self.assertIn("2NT", bids)
+        self.assertIn("3NT", bids)
 
 
 class TrainingGenerationTests(unittest.TestCase):
@@ -125,6 +153,8 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.mode, "应叫训练")
         self.assertIn(question.recommendation.bid, question.choices)
+    def test_supported_openings_for_one_level_category_matches_constant(self) -> None:
+        self.assertEqual(supported_openings_for_category("一阶定约"), {"1♣", "1♦", "1♥", "1♠", "1NT"})
 
     def test_response_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
         question = generate_response_question(seed=100, opener_bid="7NT", settings=RuleSettings())
@@ -143,9 +173,19 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(supported_openings_for_category("强开叫"), STRONG_OPENINGS)
         self.assertNotIn("2♦", supported_openings_for_category("强开叫"))
 
+    def test_supported_openings_for_preempt_category_matches_constant(self) -> None:
+        self.assertEqual(supported_openings_for_category("阻击叫"), PREEMPT_OPENINGS)
+
     def test_response_question_random_preempt_category_stays_in_preempts(self) -> None:
         question = generate_response_question(seed=100, settings=RuleSettings(), opener_category="阻击叫")
         self.assertIn(question.opener_bid, PREEMPT_OPENINGS)
+
+    def test_generate_response_question_falls_back_to_opening_when_no_supported_opening_found(self) -> None:
+        sentinel = generate_opening_question(seed=100, settings=RuleSettings())
+        with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("Pass", "x", "x")):
+            with patch("bridge_trainer.training.generate_opening_question", return_value=sentinel):
+                question = generate_response_question(seed=100, settings=RuleSettings())
+        self.assertIs(question, sentinel)
 
     def test_response_question_accepts_requested_preempt_opener(self) -> None:
         question = generate_response_question(seed=100, opener_bid="3♦", settings=RuleSettings(), opener_category="阻击叫")
@@ -157,6 +197,14 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.mode, "开叫者再叫训练")
         self.assertTrue(question.auction.startswith("1NT-Pass-"))
 
+    def test_generate_opener_rebid_question_skips_pass_response_for_non_preempt(self) -> None:
+        sentinel = generate_opening_question(seed=100, settings=RuleSettings())
+        with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("1♣", "x", "x")):
+            with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("Pass", "x", "x")):
+                with patch("bridge_trainer.training.generate_response_question", return_value=sentinel):
+                    question = generate_opener_rebid_question(seed=100, settings=RuleSettings())
+        self.assertIs(question, sentinel)
+
     def test_opener_rebid_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
         question = generate_opener_rebid_question(seed=100, settings=RuleSettings(), opener_bid="7NT")
         self.assertIn(question.opener_bid, supported_openings_for_category(None))
@@ -166,6 +214,15 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.mode, "应叫者第二次应叫训练")
         self.assertTrue(question.auction.startswith("1NT-Pass-"))
+
+    def test_generate_responder_rebid_question_skips_when_opener_rebid_is_pass(self) -> None:
+        sentinel = generate_opening_question(seed=100, settings=RuleSettings())
+        with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("1♣", "x", "x")):
+            with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("1♥", "x", "x")):
+                with patch("bridge_trainer.training.recommend_opener_rebid", return_value=BidRecommendation("Pass", "x", "x")):
+                    with patch("bridge_trainer.training.generate_response_question", return_value=sentinel):
+                        question = generate_responder_rebid_question(seed=100, settings=RuleSettings())
+        self.assertIs(question, sentinel)
 
     def test_responder_rebid_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
         question = generate_responder_rebid_question(seed=100, settings=RuleSettings(), opener_bid="7NT")
@@ -183,6 +240,27 @@ class TrainingGenerationTests(unittest.TestCase):
             supported_openings_for_category("未知分类"),
             supported_openings_for_category(None),
         )
+
+    def test_choose_vulnerability_without_seed_uses_random_choice(self) -> None:
+        with patch("random.choice", return_value="南北有局"):
+            self.assertEqual(choose_vulnerability(None), "南北有局")
+
+    def test_generate_opener_rebid_question_falls_back_to_response_question_when_no_sequence(self) -> None:
+        sentinel = generate_opening_question(seed=1, settings=RuleSettings())
+        with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("Pass", "x", "x")):
+            with patch("bridge_trainer.training.generate_response_question", return_value=sentinel) as mock_fallback:
+                result = generate_opener_rebid_question(seed=1, settings=RuleSettings())
+        self.assertIs(result, sentinel)
+        self.assertTrue(mock_fallback.called)
+
+    def test_generate_responder_rebid_question_falls_back_when_response_is_pass(self) -> None:
+        sentinel = generate_opening_question(seed=1, settings=RuleSettings())
+        with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("1♣", "x", "x")):
+            with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("Pass", "x", "x")):
+                with patch("bridge_trainer.training.generate_response_question", return_value=sentinel) as mock_fallback:
+                    result = generate_responder_rebid_question(seed=1, settings=RuleSettings())
+        self.assertIs(result, sentinel)
+        self.assertTrue(mock_fallback.called)
 
 
 class ApiHelperTests(unittest.TestCase):

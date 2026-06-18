@@ -4,12 +4,19 @@ import unittest
 
 from bridge_trainer.bidding import (
     RuleSettings,
+    choose_raise_level,
+    choose_two_over_one_suit,
+    choose_one_level_major_response,
+    find_splinter_suit,
     game_threshold_adjustment,
+    is_negative_double_available,
     is_legal_response_bid,
     legal_response_bids_with_interference,
     legal_rebid_bids,
     legal_response_bids,
     legal_responder_rebid_bids,
+    negative_double_target_majors,
+    next_legal_contract,
     parse_contract_bid,
     recommend_opener_rebid,
     recommend_opening,
@@ -17,6 +24,7 @@ from bridge_trainer.bidding import (
     recommend_response,
     recommend_response_to_preempt,
     recommend_response_to_weak_two,
+    should_make_negative_double,
 )
 from bridge_trainer.evaluator import HandEvaluation
 
@@ -122,6 +130,15 @@ class ResponseRecommendationTests(unittest.TestCase):
     def test_minor_opening_balanced_game_to_three_nt(self) -> None:
         self.assertEqual(recommend_response("1♦", evaluation(13, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "3NT")
 
+    def test_minor_opening_balanced_without_invite_values_uses_one_nt(self) -> None:
+        self.assertEqual(recommend_response("1♦", evaluation(7, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "1NT")
+
+    def test_minor_opening_balanced_invite_values_uses_two_nt(self) -> None:
+        self.assertEqual(recommend_response("1♦", evaluation(11, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "2NT")
+
+    def test_minor_opening_with_five_card_support_and_ten_hcp_raises_to_three(self) -> None:
+        self.assertEqual(recommend_response("1♦", evaluation(10, 3, 3, 5, 2, balanced=False), vulnerability=VULNERABILITY).bid, "3♦")
+
     def test_minor_opening_low_values_pass(self) -> None:
         self.assertEqual(recommend_response("1♦", evaluation(5, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "Pass")
 
@@ -134,11 +151,20 @@ class ResponseRecommendationTests(unittest.TestCase):
     def test_two_nt_response_uses_transfer_with_five_card_major(self) -> None:
         self.assertEqual(recommend_response("2NT", evaluation(2, 3, 5, 3, 2), vulnerability=VULNERABILITY).bid, "3♦")
 
+    def test_two_nt_response_uses_spade_transfer_with_five_spades(self) -> None:
+        self.assertEqual(recommend_response("2NT", evaluation(2, 5, 3, 3, 2), vulnerability=VULNERABILITY).bid, "3♥")
+
     def test_two_nt_response_uses_three_nt_without_major(self) -> None:
         self.assertEqual(recommend_response("2NT", evaluation(2, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "3NT")
 
     def test_preempt_response_passes_without_clear_action(self) -> None:
         self.assertEqual(recommend_response("3♦", evaluation(6, 4, 3, 2, 4, balanced=False), vulnerability=VULNERABILITY).bid, "Pass")
+
+    def test_minor_opening_unbalanced_without_clear_action_defaults_to_one_nt(self) -> None:
+        self.assertEqual(recommend_response("1♦", evaluation(8, 3, 3, 6, 1, balanced=False), vulnerability=VULNERABILITY).bid, "1NT")
+
+    def test_preempt_response_with_support_can_make_obstructive_raise(self) -> None:
+        self.assertEqual(recommend_response("3♥", evaluation(6, 3, 3, 4, 3, balanced=False), vulnerability=VULNERABILITY).bid, "4♥")
 
     def test_preempt_response_balanced_game_values_prefers_three_nt(self) -> None:
         settings = RuleSettings(august_2nt_enabled=False)
@@ -196,7 +222,8 @@ class ResponseRecommendationTests(unittest.TestCase):
         self.assertEqual(recommend_response("1♠", evaluation(8, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♣")
 
     def test_bergen_medium_support_four_spades_twelve_hcp(self) -> None:
-        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
+        # 12 HCP + 4张黑桃支持，Jacoby 2NT门槛已调为12，走Jacoby 2NT
+        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "2NT")
 
     def test_bergen_disabled_falls_back_to_simple_raise(self) -> None:
         settings = RuleSettings(bergen_raises_enabled=False)
@@ -216,7 +243,8 @@ class ResponseRecommendationTests(unittest.TestCase):
         self.assertEqual(recommend_response("1♥", evaluation(9, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "2♥")
 
     def test_limit_raise_boundary_twelve_hcp(self) -> None:
-        self.assertEqual(recommend_response("1♥", evaluation(12, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "3♥")
+        # 12 HCP + 3张红心 + 4张方块：限制加叫上限已调为11，改走2/1（2♦）
+        self.assertEqual(recommend_response("1♥", evaluation(12, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "2♦")
 
     def test_custom_simple_raise_max_ten_makes_ten_hcp_simple(self) -> None:
         settings = RuleSettings(responder_simple_raise_max=10, responder_limit_raise_min=11, responder_limit_raise_max=12)
@@ -296,7 +324,8 @@ class ResponseRecommendationTests(unittest.TestCase):
         self.assertEqual(recommend_response("1♠", evaluation(8, 3, 3, 3, 2), vulnerability=VULNERABILITY).bid, "2♠")
 
     def test_responder_twelve_hcp_limit_raise_not_game(self) -> None:
-        self.assertEqual(recommend_response("1♥", evaluation(12, 3, 3, 3, 4), vulnerability=VULNERABILITY).bid, "3♥")
+        # 12 HCP + 3张红心 + 4张梅花：限制加叫上限已调为11，改走2/1（2♣）
+        self.assertEqual(recommend_response("1♥", evaluation(12, 3, 3, 3, 4), vulnerability=VULNERABILITY).bid, "2♣")
 
     def test_responder_thirteen_hcp_game_not_limit_raise(self) -> None:
         self.assertEqual(recommend_response("1♠", evaluation(13, 3, 2, 3, 5), vulnerability=VULNERABILITY).bid, "4♠")
@@ -326,7 +355,7 @@ class ResponseRecommendationTests(unittest.TestCase):
         settings = RuleSettings(responder_splinter_min_hcp=11)
         self.assertEqual(
             recommend_response("1♥", evaluation(10, 3, 4, 1, 5), settings=settings, vulnerability=VULNERABILITY).bid,
-            "3♦",  # Bergen medium support (10-12 HCP)
+            "3♦",  # Bergen medium support (10-11 HCP)
         )
 
     def test_splinter_above_max_hcp_uses_jacoby(self) -> None:
@@ -338,8 +367,8 @@ class ResponseRecommendationTests(unittest.TestCase):
         )
 
     def test_splinter_requires_singleton_void(self) -> None:
-        # 12 HCP，4张支持，但没有单张/void -> 应该是Bergen中等支持3♦
-        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "3♦")
+        # 12 HCP，4张支持，没有单张/void -> Jacoby 2NT门槛已调为12，走Jacoby 2NT
+        self.assertEqual(recommend_response("1♠", evaluation(12, 4, 3, 3, 3), vulnerability=VULNERABILITY).bid, "2NT")
 
     def test_splinter_diamond_singleton_with_hearts(self) -> None:
         # 1♥开叫，11 HCP，4张心支持，单张方块（最小Splinter） -> 3♦
@@ -457,6 +486,10 @@ class RebidRecommendationTests(unittest.TestCase):
         hand = evaluation(20, 3, 3, 4, 3)
         self.assertEqual(recommend_opener_rebid("2NT", "3NT", hand, vulnerability=VULNERABILITY).bid, "Pass")
 
+    def test_one_nt_three_nt_sequence_stops(self) -> None:
+        hand = evaluation(16, 3, 3, 4, 3)
+        self.assertEqual(recommend_opener_rebid("1NT", "3NT", hand, vulnerability=VULNERABILITY).bid, "Pass")
+
     def test_ogust_rebid_minimum_poor_quality_answers_three_clubs(self) -> None:
         hand = evaluation(6, 2, 6, 3, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 1, "D": 0, "C": 0})
         self.assertEqual(recommend_opener_rebid("2♥", "2NT", hand, vulnerability=VULNERABILITY).bid, "3♣")
@@ -505,11 +538,16 @@ class RebidRecommendationTests(unittest.TestCase):
         hand = evaluation(8, 3, 5, 3, 2, balanced=False)
         self.assertEqual(recommend_responder_rebid("1♦", "1♥", "2♣", hand, vulnerability=VULNERABILITY).bid, "Pass")
 
+    def test_responder_rebid_invalid_contract_sequence_defaults_to_pass(self) -> None:
+        hand = evaluation(8, 3, 3, 4, 3)
+        self.assertEqual(recommend_responder_rebid("1♦", "1♥", "X", hand, vulnerability=VULNERABILITY).bid, "Pass")
+
 
 class UtilityRuleTests(unittest.TestCase):
     def test_parse_contract_bid(self) -> None:
         self.assertEqual(parse_contract_bid("3NT"), (3, "NT"))
         self.assertEqual(parse_contract_bid("2♥"), (2, "♥"))
+        self.assertIsNone(parse_contract_bid("2X"))
         self.assertIsNone(parse_contract_bid("Pass"))
 
     def test_legal_response_bid_ordering(self) -> None:
@@ -531,6 +569,45 @@ class UtilityRuleTests(unittest.TestCase):
         self.assertEqual(game_threshold_adjustment("南北有局", RuleSettings(scoring_mode="IMP")), -1)
         self.assertEqual(game_threshold_adjustment("双方无局", RuleSettings(scoring_mode="MP")), 1)
         self.assertEqual(game_threshold_adjustment("双方无局", RuleSettings(scoring_mode="IMP", game_aggressiveness=1)), -1)
+
+    def test_negative_double_availability_guard_branches(self) -> None:
+        self.assertFalse(is_negative_double_available("2♣", "2♦"))
+        self.assertFalse(is_negative_double_available("1♠", "2♣"))
+        self.assertFalse(is_negative_double_available("1NT", "1♦"))
+        self.assertFalse(is_negative_double_available("1♣", "1NT"))
+        self.assertFalse(is_negative_double_available("1♥", "1♦"))
+
+    def test_negative_double_target_majors_maps_sequences(self) -> None:
+        self.assertEqual(negative_double_target_majors("1♣", "1♦"), ["H", "S"])
+        self.assertEqual(negative_double_target_majors("1♣", "1♠"), ["H"])
+        self.assertEqual(negative_double_target_majors("1♦", "1♥"), ["S"])
+        self.assertEqual(negative_double_target_majors("1♥", "1♠"), ["D"])
+        self.assertEqual(negative_double_target_majors("X", "1♠"), [])
+
+    def test_should_make_negative_double_returns_false_when_unavailable(self) -> None:
+        hand = evaluation(12, 4, 2, 4, 3, balanced=False)
+        self.assertFalse(should_make_negative_double("1♠", "1NT", hand, RuleSettings()))
+
+    def test_choose_raise_level_thresholds(self) -> None:
+        self.assertEqual(choose_raise_level(2, 19), 4)
+        self.assertEqual(choose_raise_level(1, 16), 3)
+
+    def test_next_legal_contract_returns_none_when_no_legal_contract(self) -> None:
+        self.assertIsNone(next_legal_contract("7NT", ["Pass", "1♣"]))
+
+    def test_find_splinter_suit_boundaries(self) -> None:
+        self.assertIsNone(find_splinter_suit("H", {"S": 4, "H": 3, "D": 3, "C": 3}))
+        self.assertEqual(find_splinter_suit("H", {"S": 1, "H": 4, "D": 5, "C": 3}), "S")
+        self.assertIsNone(find_splinter_suit("S", {"S": 4, "H": 3, "D": 3, "C": 3}))
+
+    def test_choose_two_over_one_suit_returns_none_without_candidates(self) -> None:
+        self.assertIsNone(choose_two_over_one_suit({"S": 5, "H": 3, "D": 3, "C": 2}, excluded="S"))
+
+    def test_choose_one_level_major_response_returns_none_without_four_card_major(self) -> None:
+        self.assertIsNone(choose_one_level_major_response({"S": 3, "H": 3, "D": 4, "C": 3}))
+
+    def test_choose_one_level_major_response_prefers_spade_when_longer(self) -> None:
+        self.assertEqual(choose_one_level_major_response({"S": 5, "H": 4, "D": 2, "C": 2}), "S")
 
     def test_response_to_weak_two_helper_asks_two_nt_when_strong_balanced(self) -> None:
         result = recommend_response_to_weak_two("H", evaluation(15, 3, 3, 4, 3, balanced=True))

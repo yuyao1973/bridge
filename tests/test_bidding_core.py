@@ -532,9 +532,21 @@ class RebidRecommendationTests(unittest.TestCase):
         self.assertEqual(result.bid, "3NT")
         self.assertEqual(result.rule_name, "低花限制加叫后 3NT")
 
+    def test_opener_rebid_after_one_club_three_club_balanced_game_values_prefers_three_nt(self) -> None:
+        hand = evaluation(13, 4, 3, 2, 4, balanced=True)
+        result = recommend_opener_rebid("1♣", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3NT")
+        self.assertEqual(result.rule_name, "低花限制加叫后 3NT")
+
     def test_opener_rebid_after_one_diamond_three_diamond_without_game_values_passes(self) -> None:
         hand = evaluation(12, 4, 3, 4, 2, balanced=True)
         result = recommend_opener_rebid("1♦", "3♦", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "低花限制加叫后止叫")
+
+    def test_opener_rebid_after_one_club_three_club_without_game_values_passes(self) -> None:
+        hand = evaluation(12, 4, 3, 2, 4, balanced=True)
+        result = recommend_opener_rebid("1♣", "3♣", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "Pass")
         self.assertEqual(result.rule_name, "低花限制加叫后止叫")
 

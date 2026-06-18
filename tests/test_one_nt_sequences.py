@@ -88,6 +88,21 @@ class OneNtResponderRebidTests(unittest.TestCase):
         recommendation = recommend_responder_rebid("1NT", "2♣", "2♥", hand, vulnerability=VULNERABILITY)
         self.assertEqual(recommendation.bid, "3♥")
 
+    def test_stayman_major_response_without_fit_games_in_nt(self) -> None:
+        hand = evaluation(10, 3, 3, 4, 3)
+        recommendation = recommend_responder_rebid("1NT", "2♣", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(recommendation.bid, "3NT")
+
+    def test_stayman_major_response_without_fit_invites_in_nt(self) -> None:
+        hand = evaluation(8, 3, 3, 4, 3)
+        recommendation = recommend_responder_rebid("1NT", "2♣", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(recommendation.bid, "2NT")
+
+    def test_stayman_major_response_without_fit_passes_with_low_values(self) -> None:
+        hand = evaluation(5, 3, 3, 4, 3)
+        recommendation = recommend_responder_rebid("1NT", "2♣", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(recommendation.bid, "Pass")
+
     def test_heart_transfer_invites_with_eight_hcp(self) -> None:
         hand = evaluation(8, 3, 5, 3, 2)
         recommendation = recommend_responder_rebid("1NT", "2♦", "2♥", hand, vulnerability=VULNERABILITY)
@@ -117,6 +132,16 @@ class OneNtResponderRebidTests(unittest.TestCase):
         hand = evaluation(10, 6, 3, 2, 2)
         recommendation = recommend_responder_rebid("1NT", "2♥", "2♠", hand, vulnerability=VULNERABILITY)
         self.assertEqual(recommendation.bid, "4♠")
+
+    def test_spade_transfer_games_in_nt_without_six_spades(self) -> None:
+        hand = evaluation(10, 5, 3, 3, 2)
+        recommendation = recommend_responder_rebid("1NT", "2♥", "2♠", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(recommendation.bid, "3NT")
+
+    def test_spade_transfer_passes_with_low_values(self) -> None:
+        hand = evaluation(5, 5, 3, 3, 2)
+        recommendation = recommend_responder_rebid("1NT", "2♥", "2♠", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(recommendation.bid, "Pass")
 
 
 if __name__ == "__main__":

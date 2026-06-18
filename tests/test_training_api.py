@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 
-from api import question_to_payload, settings_from_payload
+from api import check_answer, create_question, health, question_to_payload, settings_from_payload
 from bridge_trainer.bidding import BidRecommendation, RuleSettings
 from bridge_trainer.cards import Card
 from bridge_trainer.evaluator import HandEvaluation
@@ -12,6 +13,7 @@ from bridge_trainer.training import (
     TrainingQuestion,
     build_acceptable_bids,
     choose_vulnerability,
+    generate_opening_question,
     generate_opener_rebid_question,
     generate_responder_rebid_question,
     generate_response_question,
@@ -48,13 +50,85 @@ class AcceptableBidTests(unittest.TestCase):
     def test_pass_has_no_extra_acceptable_bid(self) -> None:
         self.assertEqual(build_acceptable_bids("Pass", ["Pass", "1♣"], mode="opening"), ["Pass"])
 
+    def test_non_contract_recommended_bid_returns_itself(self) -> None:
+        self.assertEqual(build_acceptable_bids("X", ["Pass", "X"], mode="response"), ["X"])
+
+    def test_opener_rebid_nt_band_adds_adjacent_nt_levels(self) -> None:
+        bids = build_acceptable_bids("2NT", ["Pass", "1NT", "2NT", "3NT"], mode="opener_rebid", response_bid="1♥")
+        self.assertIn("1NT", bids)
+        self.assertIn("2NT", bids)
+        self.assertIn("3NT", bids)
+
+    def test_responder_rebid_nt_over_opener_nt_adds_two_nt_and_three_nt(self) -> None:
+        bids = build_acceptable_bids(
+            "3NT",
+            ["Pass", "2NT", "3NT", "4NT"],
+            mode="responder_rebid",
+            opener_rebid_bid="2NT",
+        )
+        self.assertIn("2NT", bids)
+        self.assertIn("3NT", bids)
+
+    def test_responder_rebid_major_support_adds_adjacent_raise_levels(self) -> None:
+        bids = build_acceptable_bids(
+            "3♥",
+            ["Pass", "2♥", "3♥", "4♥"],
+            mode="responder_rebid",
+            response_bid="2♥",
+            opener_rebid_bid="2♦",
+        )
+        self.assertIn("2♥", bids)
+        self.assertIn("3♥", bids)
+        self.assertIn("4♥", bids)
+
+    def test_opener_rebid_one_nt_accepts_two_nt(self) -> None:
+        bids = build_acceptable_bids("1NT", ["Pass", "1NT", "2NT"], mode="opener_rebid")
+        self.assertEqual(bids, ["1NT", "2NT"])
+
+    def test_opener_rebid_three_nt_accepts_two_nt(self) -> None:
+        bids = build_acceptable_bids("3NT", ["Pass", "2NT", "3NT"], mode="opener_rebid")
+        self.assertEqual(bids, ["3NT", "2NT"])
+
+    def test_opener_rebid_same_strain_adds_adjacent_levels(self) -> None:
+        bids = build_acceptable_bids(
+            "3♥",
+            ["Pass", "2♥", "3♥", "4♥"],
+            mode="opener_rebid",
+            response_bid="2♥",
+            opener_bid="1♥",
+        )
+        self.assertIn("2♥", bids)
+        self.assertIn("3♥", bids)
+        self.assertIn("4♥", bids)
+
+    def test_responder_rebid_same_as_opener_rebid_suit_adds_adjacent(self) -> None:
+        bids = build_acceptable_bids(
+            "3♦",
+            ["Pass", "2♦", "3♦", "4♦"],
+            mode="responder_rebid",
+            opener_rebid_bid="2♦",
+        )
+        self.assertIn("2♦", bids)
+        self.assertIn("3♦", bids)
+        self.assertIn("4♦", bids)
+
 
 class TrainingGenerationTests(unittest.TestCase):
+    def test_opening_question_generation_has_consistent_fields(self) -> None:
+        question = generate_opening_question(seed=100, settings=RuleSettings())
+        self.assertEqual(question.mode, "开叫训练")
+        self.assertIn(question.recommendation.bid, question.choices)
+        self.assertIn(question.recommendation.bid, question.acceptable_bids)
+
     def test_response_question_respects_requested_one_nt_opener(self) -> None:
         question = generate_response_question(seed=100, opener_bid="1NT", settings=RuleSettings())
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.mode, "应叫训练")
         self.assertIn(question.recommendation.bid, question.choices)
+
+    def test_response_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
+        question = generate_response_question(seed=100, opener_bid="7NT", settings=RuleSettings())
+        self.assertIn(question.opener_bid, supported_openings_for_category(None))
 
     def test_response_question_respects_requested_strong_two_club_opener(self) -> None:
         question = generate_response_question(seed=100, opener_bid="2♣", settings=RuleSettings())
@@ -83,11 +157,19 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.mode, "开叫者再叫训练")
         self.assertTrue(question.auction.startswith("1NT-Pass-"))
 
+    def test_opener_rebid_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
+        question = generate_opener_rebid_question(seed=100, settings=RuleSettings(), opener_bid="7NT")
+        self.assertIn(question.opener_bid, supported_openings_for_category(None))
+
     def test_responder_rebid_question_respects_requested_one_nt_opener(self) -> None:
         question = generate_responder_rebid_question(seed=100, settings=RuleSettings(), opener_bid="1NT")
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.mode, "应叫者第二次应叫训练")
         self.assertTrue(question.auction.startswith("1NT-Pass-"))
+
+    def test_responder_rebid_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
+        question = generate_responder_rebid_question(seed=100, settings=RuleSettings(), opener_bid="7NT")
+        self.assertIn(question.opener_bid, supported_openings_for_category(None))
 
     def test_vulnerability_is_deterministic_by_seed(self) -> None:
         self.assertEqual(choose_vulnerability(0), "双方无局")
@@ -95,6 +177,12 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(choose_vulnerability(2), "东西有局")
         self.assertEqual(choose_vulnerability(3), "双方有局")
         self.assertEqual(choose_vulnerability(4), "双方无局")
+
+    def test_supported_openings_for_unknown_category_returns_all_supported(self) -> None:
+        self.assertEqual(
+            supported_openings_for_category("未知分类"),
+            supported_openings_for_category(None),
+        )
 
 
 class ApiHelperTests(unittest.TestCase):
@@ -159,6 +247,78 @@ class ApiHelperTests(unittest.TestCase):
         self.assertEqual(payload["evaluation"]["lengths"], {"S": 3, "H": 3, "D": 4, "C": 3})
         self.assertEqual(payload["acceptable_bids"], ["1NT"])
         self.assertEqual(len(payload["hand"]), 13)
+
+
+class ApiEndpointTests(unittest.TestCase):
+    class _DummyRequest:
+        def __init__(self, payload: dict) -> None:
+            self._payload = payload
+
+        async def json(self) -> dict:
+            return self._payload
+
+    def test_health_endpoint_returns_status_ok(self) -> None:
+        response = asyncio.run(health(None))
+        self.assertEqual(response.status_code, 200)
+        data = response.body.decode("utf-8")
+        self.assertIn('"status":"ok"', data)
+        self.assertIn('"app_version"', data)
+        self.assertIn('"build_time"', data)
+
+    def test_create_question_response_mode_returns_required_fields(self) -> None:
+        req = self._DummyRequest({"mode": "response", "seed": 100, "opener_bid": "1NT", "settings": {}})
+        response = asyncio.run(create_question(req))
+        self.assertEqual(response.status_code, 200)
+        data = response.body.decode("utf-8")
+        self.assertIn('"mode":"应叫训练"', data)
+        self.assertIn('"seed":100', data)
+        self.assertIn('"recommendation"', data)
+        self.assertIn('"choices"', data)
+        self.assertIn('"acceptable_bids"', data)
+
+    def test_check_answer_primary_grade(self) -> None:
+        req = self._DummyRequest(
+            {
+                "selected_bid": "3NT",
+                "recommended_bid": "3NT",
+                "acceptable_bids": ["3NT", "2NT"],
+                "explanation": "x",
+                "rule_name": "r",
+            }
+        )
+        response = asyncio.run(check_answer(req))
+        self.assertEqual(response.status_code, 200)
+        data = response.body.decode("utf-8")
+        self.assertIn('"correct":true', data)
+        self.assertIn('"grade":"primary"', data)
+
+    def test_check_answer_acceptable_grade(self) -> None:
+        req = self._DummyRequest(
+            {
+                "selected_bid": "2NT",
+                "recommended_bid": "3NT",
+                "acceptable_bids": ["3NT", "2NT"],
+            }
+        )
+        response = asyncio.run(check_answer(req))
+        self.assertEqual(response.status_code, 200)
+        data = response.body.decode("utf-8")
+        self.assertIn('"correct":true', data)
+        self.assertIn('"grade":"acceptable"', data)
+
+    def test_check_answer_incorrect_grade(self) -> None:
+        req = self._DummyRequest(
+            {
+                "selected_bid": "Pass",
+                "recommended_bid": "3NT",
+                "acceptable_bids": ["3NT", "2NT"],
+            }
+        )
+        response = asyncio.run(check_answer(req))
+        self.assertEqual(response.status_code, 200)
+        data = response.body.decode("utf-8")
+        self.assertIn('"correct":false', data)
+        self.assertIn('"grade":"incorrect"', data)
 
 
 if __name__ == "__main__":

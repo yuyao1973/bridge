@@ -469,6 +469,18 @@ class RebidRecommendationTests(unittest.TestCase):
         self.assertEqual(result.bid, "2♣")
         self.assertEqual(result.rule_name, "再叫第二套")
 
+    def test_opener_rebid_after_one_club_one_heart_prefers_one_spade(self) -> None:
+        hand = evaluation(12, 4, 1, 3, 5, balanced=False)
+        result = recommend_opener_rebid("1♣", "1♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "1♠")
+        self.assertEqual(result.rule_name, "再叫第二套")
+
+    def test_opener_rebid_after_one_diamond_one_heart_prefers_one_nt_over_two_clubs(self) -> None:
+        hand = evaluation(14, 2, 2, 5, 4, balanced=False)
+        result = recommend_opener_rebid("1♦", "1♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "1NT")
+        self.assertEqual(result.rule_name, "一阶序列低限再叫 1NT")
+
     def test_reverse_second_suit_requires_extra_strength(self) -> None:
         hand = evaluation(14, 2, 2, 4, 5, balanced=False)
         result = recommend_opener_rebid("1♣", "1NT", hand, vulnerability=VULNERABILITY)
@@ -489,6 +501,18 @@ class RebidRecommendationTests(unittest.TestCase):
         result = recommend_opener_rebid("1NT", "4♠", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "4NT")
         self.assertEqual(result.rule_name, "最低合法再叫")
+
+    def test_opener_rebid_after_responder_three_nt_stops(self) -> None:
+        hand = evaluation(14, 2, 4, 2, 5, balanced=False)
+        result = recommend_opener_rebid("1♣", "3NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "3NT 后止叫")
+
+    def test_opener_rebid_after_one_diamond_one_nt_minimum_balanced_stops(self) -> None:
+        hand = evaluation(14, 4, 4, 3, 2, balanced=True)
+        result = recommend_opener_rebid("1♦", "1NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "1NT 应叫后最低限止叫")
 
     def test_two_nt_stayman_rebid_answers_hearts(self) -> None:
         hand = evaluation(20, 3, 4, 3, 3)

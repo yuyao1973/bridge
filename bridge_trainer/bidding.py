@@ -446,6 +446,7 @@ def recommend_opener_rebid(
     opener_suit = symbol_to_suit(opening_contract[1])
     response_suit = symbol_to_suit(response_contract[1])
     response_level = response_contract[0]
+    opening_level = opening_contract[0]
     opening_level, opening_strain = opening_contract
     is_weak_two_opening = opening_level == 2 and opening_strain in {"♦", "♥", "♠"}
     is_three_plus_preempt_opening = opening_level >= 3 and opening_strain in {"♣", "♦", "♥", "♠"}
@@ -464,6 +465,14 @@ def recommend_opener_rebid(
             "Pass",
             f"弱二开叫后，除 Ogust 2NT 问叫外当前简化体系默认不开新一轮描述，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
             "弱二后止叫",
+        )
+
+    # 对手无干扰的简化训练中，同伴直接叫到 3NT 通常为落定成局，开叫者应止叫。
+    if response_bid == "3NT":
+        return BidRecommendation(
+            "Pass",
+            f"同伴已直接叫到 3NT，开叫者通常不再进叫，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+            "3NT 后止叫",
         )
 
     if opening_bid == "1NT":
@@ -486,9 +495,6 @@ def recommend_opener_rebid(
             if hcp >= accept_invite_hcp and is_legal_response_bid(response_bid, "3NT"):
                 return BidRecommendation("3NT", f"1NT-2NT 为邀局；你有 {hcp} HCP，达到接受邀局门槛，叫 3NT。牌型：{length_text}。", "接受 2NT 邀局")
             return BidRecommendation("Pass", f"1NT-2NT 为邀局；你有 {hcp} HCP，未达到接受邀局门槛，建议 Pass。牌型：{length_text}。", "拒绝 2NT 邀局")
-
-        if response_bid == "3NT":
-            return BidRecommendation("Pass", f"同伴已直接叫到 3NT，开叫者通常不再进叫，建议 Pass。牌型：{length_text}。", "3NT 后止叫")
 
     # 二阶弱开叫（2♦/2♥/2♠）+ Ogust 2NT 问叫的开叫者回答
     if (
@@ -555,8 +561,13 @@ def recommend_opener_rebid(
         if response_bid == "3♥" and settings.transfers_enabled and is_legal_response_bid(response_bid, "3♠"):
             return BidRecommendation("3♠", f"2NT-3♥ 序列中，3♥ 为黑桃转移，开叫者应接受转移叫 3♠。牌型：{length_text}。", "2NT 后接受黑桃转移")
 
-        if response_bid == "3NT":
-            return BidRecommendation("Pass", f"同伴已直接叫到 3NT，开叫者通常不再进叫，建议 Pass。牌型：{length_text}。", "2NT-3NT 后止叫")
+    # 一阶开叫后同伴 1NT 应叫，最低限均型通常以止叫为主。
+    if opening_level == 1 and response_bid == "1NT" and evaluation.balanced and hcp <= 14:
+        return BidRecommendation(
+            "Pass",
+            f"同伴 1NT 应叫后，你有 {hcp} HCP 且均型，属于最低限，通常止叫 Pass。牌型：{length_text}。",
+            "1NT 应叫后最低限止叫",
+        )
 
     if response_suit in {"H", "S"} and lengths[response_suit] >= 4:
         level = choose_raise_level(response_level, raise_hcp)
@@ -583,6 +594,25 @@ def recommend_opener_rebid(
                 "最低限均型再叫 1NT",
             )
 
+    # 一阶开叫-一阶应叫后，若没有可叫的一阶第二套，通常优先再叫 1NT 描述低限牌力。
+    opener_length = lengths[opener_suit] if opener_suit is not None else 0
+    has_singleton_or_void = min(lengths.values()) <= 1
+    if (
+        opening_level == 1
+        and response_level == 1
+        and 12 <= hcp <= 14
+        and opener_length <= 5
+        and not has_singleton_or_void
+        and is_legal_response_bid(response_bid, "1NT")
+    ):
+        one_level_second_suit = choose_one_level_second_suit(lengths, opener_suit, response_suit, response_bid)
+        if one_level_second_suit is None:
+            return BidRecommendation(
+                "1NT",
+                f"你有 {hcp} HCP，一阶开叫后同伴一阶应叫；牌型无单缺且开叫套不超过 5 张，当前没有可叫的一阶第二套，优先再叫 1NT 表示低限并控制叫牌高度。牌型：{length_text}。",
+                "一阶序列低限再叫 1NT",
+            )
+
     if opener_suit is not None and lengths[opener_suit] >= 6:
         bid = minimum_legal_bid_for_suit(opener_suit, response_bid, minimum_level=2)
         if bid is not None:
@@ -603,7 +633,7 @@ def recommend_opener_rebid(
         reverse_min_hcp,
     )
     if second_suit is not None:
-        bid = minimum_legal_bid_for_suit(second_suit, response_bid, minimum_level=2)
+        bid = minimum_legal_bid_for_suit(second_suit, response_bid, minimum_level=1)
         if bid is not None:
             if is_reverse_second_suit(opening_bid, response_bid, bid):
                 return BidRecommendation(
@@ -657,13 +687,34 @@ def choose_second_suit(
             continue
         if lengths[suit] < 4:
             continue
-        bid = minimum_legal_bid_for_suit(suit, response_bid, minimum_level=2)
+        bid = minimum_legal_bid_for_suit(suit, response_bid, minimum_level=1)
         if bid is None:
             continue
         if is_reverse_second_suit(opening_bid, response_bid, bid) and hcp < reverse_min_hcp:
             continue
         if bid is not None:
             candidates.append(suit)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda suit: (lengths[suit], ["C", "D", "H", "S"].index(suit)))
+
+
+def choose_one_level_second_suit(
+    lengths: dict[str, int], opener_suit: str | None, response_suit: str | None, response_bid: str
+) -> str | None:
+    candidates: list[str] = []
+    for suit in ["S", "H", "D", "C"]:
+        if suit in {opener_suit, response_suit}:
+            continue
+        if lengths[suit] < 4:
+            continue
+        bid = minimum_legal_bid_for_suit(suit, response_bid, minimum_level=1)
+        if bid is None:
+            continue
+        contract = parse_contract_bid(bid)
+        if contract is not None and contract[0] == 1:
+            candidates.append(suit)
+
     if not candidates:
         return None
     return max(candidates, key=lambda suit: (lengths[suit], ["C", "D", "H", "S"].index(suit)))

@@ -94,6 +94,39 @@ class AcceptableBidTests(unittest.TestCase):
         bids = build_acceptable_bids("1NT", ["Pass", "1NT", "2NT"], mode="opener_rebid")
         self.assertEqual(bids, ["1NT", "2NT"])
 
+    def test_opener_rebid_one_level_new_suit_accepts_one_nt(self) -> None:
+        bids = build_acceptable_bids(
+            "1♠",
+            ["Pass", "1♠", "1NT", "2♣", "2♦", "2♥"],
+            mode="opener_rebid",
+            opener_bid="1♣",
+            response_bid="1♥",
+        )
+        self.assertIn("1♠", bids)
+        self.assertIn("1NT", bids)
+
+    def test_opener_rebid_two_level_new_suit_accepts_one_nt_after_one_level_sequence(self) -> None:
+        bids = build_acceptable_bids(
+            "2♣",
+            ["Pass", "1NT", "2♣", "2♦", "2♠", "2NT"],
+            mode="opener_rebid",
+            opener_bid="1♦",
+            response_bid="1♥",
+        )
+        self.assertIn("2♣", bids)
+        self.assertIn("1NT", bids)
+
+    def test_opener_rebid_one_nt_after_one_level_sequence_accepts_two_clubs(self) -> None:
+        bids = build_acceptable_bids(
+            "1NT",
+            ["Pass", "1NT", "2♣", "2♦", "2NT"],
+            mode="opener_rebid",
+            opener_bid="1♦",
+            response_bid="1♥",
+        )
+        self.assertIn("1NT", bids)
+        self.assertIn("2♣", bids)
+
     def test_opener_rebid_three_nt_accepts_two_nt(self) -> None:
         bids = build_acceptable_bids("3NT", ["Pass", "2NT", "3NT"], mode="opener_rebid")
         self.assertEqual(bids, ["3NT", "2NT"])

@@ -333,6 +333,29 @@ def build_acceptable_bids(
             add_if_legal(f"{min(4, rec_level + 1)}{rec_strain}")
 
     elif mode == "opener_rebid":
+        if rec_level == 1 and rec_strain in {"♣", "♦", "♥", "♠"}:
+            add_if_legal("1NT")
+
+        if (
+            recommended_bid == "1NT"
+            and opener_contract is not None
+            and response_contract is not None
+            and opener_contract[0] == 1
+            and response_contract[0] == 1
+        ):
+            add_if_legal("2♣")
+            add_if_legal("2♦")
+
+        if (
+            rec_level == 2
+            and rec_strain in {"♣", "♦", "♥", "♠"}
+            and opener_contract is not None
+            and response_contract is not None
+            and opener_contract[0] == 1
+            and response_contract[0] == 1
+        ):
+            add_if_legal("1NT")
+
         if rec_strain == "NT":
             if recommended_bid == "1NT":
                 add_if_legal("2NT")

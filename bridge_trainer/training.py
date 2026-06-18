@@ -31,6 +31,29 @@ DEFAULT_SEARCH_ATTEMPTS = 2_000
 OPENING_FILTER_SEARCH_ATTEMPTS = 5_000
 RESPONSE_FILTER_SEARCH_ATTEMPTS = 15_000
 REBID_FILTER_SEARCH_ATTEMPTS = 40_000
+DIRECTED_OPENER_REBID_SEARCH_ATTEMPTS = 120_000
+DIRECTED_RESPONDER_REBID_SEARCH_ATTEMPTS = 180_000
+
+DIRECTED_OPENER_REBID_SEQUENCES: set[tuple[str, str]] = {
+    ("1NT", "2♣"),
+    ("1NT", "2♦"),
+    ("1NT", "2♥"),
+    ("2NT", "3♣"),
+    ("2NT", "3♦"),
+    ("2NT", "3♥"),
+    ("1♥", "2NT"),
+    ("1♠", "2NT"),
+}
+
+DIRECTED_RESPONDER_REBID_SEQUENCES: set[tuple[str, str, str]] = {
+    ("1NT", "2♣", "2♦"),
+    ("1NT", "2♣", "2♥"),
+    ("1NT", "2♣", "2♠"),
+    ("1NT", "2♦", "2♥"),
+    ("1NT", "2♥", "2♠"),
+    ("1♥", "2NT", "4♥"),
+    ("1♠", "2NT", "4♠"),
+}
 
 
 @dataclass(frozen=True)
@@ -50,6 +73,105 @@ class TrainingQuestion:
     opener_rebid_bid: str | None = None
 
 
+def _is_balanced_nt_opening(evaluation: HandEvaluation, settings: RuleSettings, nt_level: int) -> bool:
+    if nt_level == 1:
+        return evaluation.balanced and settings.one_nt_min <= evaluation.hcp <= settings.one_nt_max
+    if nt_level == 2:
+        return evaluation.balanced and 20 <= evaluation.hcp <= 21
+    return False
+
+
+def matches_common_opener_rebid_prefilter(
+    opener_bid: str | None,
+    response_bid: str | None,
+    opener_evaluation: HandEvaluation,
+    responder_evaluation: HandEvaluation,
+    settings: RuleSettings,
+) -> bool:
+    if opener_bid is None or response_bid is None:
+        return True
+
+    responder_lengths = responder_evaluation.lengths
+    opener_lengths = opener_evaluation.lengths
+
+    if opener_bid == "1NT" and response_bid == "2♣":
+        return _is_balanced_nt_opening(opener_evaluation, settings, 1) and responder_evaluation.hcp >= 8 and (
+            responder_lengths["H"] >= 4 or responder_lengths["S"] >= 4
+        )
+    if opener_bid == "1NT" and response_bid == "2♦":
+        return _is_balanced_nt_opening(opener_evaluation, settings, 1) and settings.transfers_enabled and responder_lengths["H"] >= 5
+    if opener_bid == "1NT" and response_bid == "2♥":
+        return _is_balanced_nt_opening(opener_evaluation, settings, 1) and settings.transfers_enabled and responder_lengths["S"] >= 5
+    if opener_bid == "2NT" and response_bid == "3♣":
+        return _is_balanced_nt_opening(opener_evaluation, settings, 2) and (
+            responder_lengths["H"] >= 4 or responder_lengths["S"] >= 4
+        )
+    if opener_bid == "2NT" and response_bid == "3♦":
+        return _is_balanced_nt_opening(opener_evaluation, settings, 2) and settings.transfers_enabled and responder_lengths["H"] >= 5
+    if opener_bid == "2NT" and response_bid == "3♥":
+        return _is_balanced_nt_opening(opener_evaluation, settings, 2) and settings.transfers_enabled and responder_lengths["S"] >= 5
+    if opener_bid == "1♥" and response_bid == "2NT":
+        return settings.jacoby_2nt_enabled and opener_lengths["H"] >= 5 and responder_lengths["H"] >= 4 and responder_evaluation.hcp >= 12
+    if opener_bid == "1♠" and response_bid == "2NT":
+        return settings.jacoby_2nt_enabled and opener_lengths["S"] >= 5 and responder_lengths["S"] >= 4 and responder_evaluation.hcp >= 12
+
+    return True
+
+
+def matches_common_responder_rebid_prefilter(
+    opener_bid: str | None,
+    response_bid: str | None,
+    opener_rebid_bid: str | None,
+    opener_evaluation: HandEvaluation,
+    responder_evaluation: HandEvaluation,
+    settings: RuleSettings,
+) -> bool:
+    if opener_bid is None or response_bid is None:
+        return True
+
+    responder_lengths = responder_evaluation.lengths
+    opener_lengths = opener_evaluation.lengths
+
+    if opener_bid == "1NT" and response_bid == "2♣":
+        if not (_is_balanced_nt_opening(opener_evaluation, settings, 1) and responder_evaluation.hcp >= 8 and (responder_lengths["H"] >= 4 or responder_lengths["S"] >= 4)):
+            return False
+        if opener_rebid_bid == "2♥":
+            return opener_lengths["H"] >= 4
+        if opener_rebid_bid == "2♠":
+            return opener_lengths["H"] < 4 and opener_lengths["S"] >= 4
+        if opener_rebid_bid == "2♦":
+            return opener_lengths["H"] < 4 and opener_lengths["S"] < 4
+        return True
+
+    if opener_bid == "1NT" and response_bid == "2♦":
+        return (
+            _is_balanced_nt_opening(opener_evaluation, settings, 1)
+            and settings.transfers_enabled
+            and responder_lengths["H"] >= 5
+            and (opener_rebid_bid is None or opener_rebid_bid == "2♥")
+        )
+
+    if opener_bid == "1NT" and response_bid == "2♥":
+        return (
+            _is_balanced_nt_opening(opener_evaluation, settings, 1)
+            and settings.transfers_enabled
+            and responder_lengths["S"] >= 5
+            and (opener_rebid_bid is None or opener_rebid_bid == "2♠")
+        )
+
+    if opener_bid == "1♥" and response_bid == "2NT":
+        if not (settings.jacoby_2nt_enabled and opener_lengths["H"] >= 5 and responder_lengths["H"] >= 4 and responder_evaluation.hcp >= 12):
+            return False
+        return opener_rebid_bid != "4♥" or opener_lengths["H"] >= 5
+
+    if opener_bid == "1♠" and response_bid == "2NT":
+        if not (settings.jacoby_2nt_enabled and opener_lengths["S"] >= 5 and responder_lengths["S"] >= 4 and responder_evaluation.hcp >= 12):
+            return False
+        return opener_rebid_bid != "4♠" or opener_lengths["S"] >= 5
+
+    return True
+
+
 def search_attempt_budget(
     opener_bid: str | None = None,
     response_bid: str | None = None,
@@ -63,6 +185,38 @@ def search_attempt_budget(
     if opener_rebid_bid is not None:
         attempts = max(attempts, REBID_FILTER_SEARCH_ATTEMPTS)
     return attempts
+
+
+def directed_sequence_attempt_budget(
+    opener_bid: str | None = None,
+    response_bid: str | None = None,
+    opener_rebid_bid: str | None = None,
+) -> int:
+    attempts = search_attempt_budget(opener_bid=opener_bid, response_bid=response_bid, opener_rebid_bid=opener_rebid_bid)
+    if opener_bid is not None and response_bid is not None:
+        if opener_rebid_bid is None and (opener_bid, response_bid) in DIRECTED_OPENER_REBID_SEQUENCES:
+            attempts = max(attempts, DIRECTED_OPENER_REBID_SEARCH_ATTEMPTS)
+        if opener_rebid_bid is not None and (opener_bid, response_bid, opener_rebid_bid) in DIRECTED_RESPONDER_REBID_SEQUENCES:
+            attempts = max(attempts, DIRECTED_RESPONDER_REBID_SEARCH_ATTEMPTS)
+    return attempts
+
+
+def iter_role_pairs(hands: dict[str, Hand], prioritize_sequence: bool, default_opener: str, default_responder: str) -> list[tuple[Hand, Hand]]:
+    pairs: list[tuple[Hand, Hand]] = [(hands[default_opener], hands[default_responder])]
+    if not prioritize_sequence:
+        return pairs
+
+    positions = list(hands.keys())
+    for opener_pos in positions:
+        for responder_pos in positions:
+            if opener_pos == responder_pos:
+                continue
+            opener_hand = hands[opener_pos]
+            responder_hand = hands[responder_pos]
+            if any(existing_opener is opener_hand and existing_responder is responder_hand for existing_opener, existing_responder in pairs):
+                continue
+            pairs.append((opener_hand, responder_hand))
+    return pairs
 
 
 def generate_opening_question(seed: int | None = None, settings: RuleSettings | None = None) -> TrainingQuestion:
@@ -149,57 +303,66 @@ def generate_opener_rebid_question(
     if opener_bid is not None and response_bid is not None and response_bid not in legal_response_bids(opener_bid):
         response_bid = None
     base_seed = seed if seed is not None else 1
-    attempts = search_attempt_budget(opener_bid=opener_bid, response_bid=response_bid)
+    attempts = directed_sequence_attempt_budget(opener_bid=opener_bid, response_bid=response_bid)
+    prioritize_sequence = opener_bid is not None and response_bid is not None
 
     for offset in range(attempts):
         hands = deal(base_seed + offset)
         vulnerability = choose_vulnerability(base_seed + offset)
-        opener_hand = hands["S"]
-        opener_evaluation = evaluate_hand(opener_hand)
-        opening_recommendation = recommend_opening(opener_evaluation, settings, vulnerability)
-        if opening_recommendation.bid not in supported_openings:
-            continue
-        if opener_bid is not None and opening_recommendation.bid != opener_bid:
-            continue
+        for opener_hand, responder_hand in iter_role_pairs(hands, prioritize_sequence, default_opener="S", default_responder="N"):
+            opener_evaluation = evaluate_hand(opener_hand)
+            opening_recommendation = recommend_opening(opener_evaluation, settings, vulnerability)
+            if opening_recommendation.bid not in supported_openings:
+                continue
+            if opener_bid is not None and opening_recommendation.bid != opener_bid:
+                continue
 
-        responder_evaluation = evaluate_hand(hands["N"])
-        response_recommendation = recommend_response(
-            opening_recommendation.bid,
-            responder_evaluation,
-            settings,
-            vulnerability,
-        )
-        if response_recommendation.bid == "Pass" and opening_recommendation.bid not in PREEMPT_OPENINGS:
-            continue
-        if response_bid is not None and response_recommendation.bid != response_bid:
-            continue
+            responder_evaluation = evaluate_hand(responder_hand)
+            if not matches_common_opener_rebid_prefilter(
+                opener_bid,
+                response_bid,
+                opener_evaluation,
+                responder_evaluation,
+                settings,
+            ):
+                continue
+            response_recommendation = recommend_response(
+                opening_recommendation.bid,
+                responder_evaluation,
+                settings,
+                vulnerability,
+            )
+            if response_recommendation.bid == "Pass" and opening_recommendation.bid not in PREEMPT_OPENINGS:
+                continue
+            if response_bid is not None and response_recommendation.bid != response_bid:
+                continue
 
-        recommendation = recommend_opener_rebid(
-            opening_recommendation.bid,
-            response_recommendation.bid,
-            opener_evaluation,
-            settings,
-            vulnerability,
-        )
-        return TrainingQuestion(
-            hand=opener_hand,
-            evaluation=opener_evaluation,
-            recommendation=recommendation,
-            vulnerability=vulnerability,
-            choices=REBID_BIDS,
-            legal_choices=legal_rebid_bids(response_recommendation.bid),
-            acceptable_bids=build_acceptable_bids(
-                recommendation.bid,
-                legal_rebid_bids(response_recommendation.bid),
-                mode="opener_rebid",
+            recommendation = recommend_opener_rebid(
+                opening_recommendation.bid,
+                response_recommendation.bid,
+                opener_evaluation,
+                settings,
+                vulnerability,
+            )
+            return TrainingQuestion(
+                hand=opener_hand,
+                evaluation=opener_evaluation,
+                recommendation=recommendation,
+                vulnerability=vulnerability,
+                choices=REBID_BIDS,
+                legal_choices=legal_rebid_bids(response_recommendation.bid),
+                acceptable_bids=build_acceptable_bids(
+                    recommendation.bid,
+                    legal_rebid_bids(response_recommendation.bid),
+                    mode="opener_rebid",
+                    opener_bid=opening_recommendation.bid,
+                    response_bid=response_recommendation.bid,
+                ),
+                mode="开叫者再叫训练",
+                auction=f"{opening_recommendation.bid}-{response_recommendation.bid}-? ",
                 opener_bid=opening_recommendation.bid,
                 response_bid=response_recommendation.bid,
-            ),
-            mode="开叫者再叫训练",
-            auction=f"{opening_recommendation.bid}-{response_recommendation.bid}-? ",
-            opener_bid=opening_recommendation.bid,
-            response_bid=response_recommendation.bid,
-        )
+            )
 
     if response_bid is not None:
         return generate_opener_rebid_question(
@@ -230,80 +393,90 @@ def generate_responder_rebid_question(
     if response_bid is not None and opener_rebid_bid is not None and opener_rebid_bid not in legal_rebid_bids(response_bid):
         opener_rebid_bid = None
     base_seed = seed if seed is not None else 1
-    attempts = search_attempt_budget(
+    attempts = directed_sequence_attempt_budget(
         opener_bid=opener_bid,
         response_bid=response_bid,
         opener_rebid_bid=opener_rebid_bid,
     )
+    prioritize_sequence = opener_bid is not None and response_bid is not None and opener_rebid_bid is not None
 
     for offset in range(attempts):
         hands = deal(base_seed + offset)
         vulnerability = choose_vulnerability(base_seed + offset)
-        opener_hand = hands["N"]
-        responder_hand = hands["S"]
-        opener_evaluation = evaluate_hand(opener_hand)
-        responder_evaluation = evaluate_hand(responder_hand)
+        for opener_hand, responder_hand in iter_role_pairs(hands, prioritize_sequence, default_opener="N", default_responder="S"):
+            opener_evaluation = evaluate_hand(opener_hand)
+            responder_evaluation = evaluate_hand(responder_hand)
 
-        opening_recommendation = recommend_opening(opener_evaluation, settings, vulnerability)
-        if opening_recommendation.bid not in supported_openings:
-            continue
-        if opener_bid is not None and opening_recommendation.bid != opener_bid:
-            continue
+            if not matches_common_responder_rebid_prefilter(
+                opener_bid,
+                response_bid,
+                opener_rebid_bid,
+                opener_evaluation,
+                responder_evaluation,
+                settings,
+            ):
+                continue
 
-        response_recommendation = recommend_response(
-            opening_recommendation.bid,
-            responder_evaluation,
-            settings,
-            vulnerability,
-        )
-        if response_recommendation.bid == "Pass":
-            continue
-        if response_bid is not None and response_recommendation.bid != response_bid:
-            continue
+            opening_recommendation = recommend_opening(opener_evaluation, settings, vulnerability)
+            if opening_recommendation.bid not in supported_openings:
+                continue
+            if opener_bid is not None and opening_recommendation.bid != opener_bid:
+                continue
 
-        opener_rebid_recommendation = recommend_opener_rebid(
-            opening_recommendation.bid,
-            response_recommendation.bid,
-            opener_evaluation,
-            settings,
-            vulnerability,
-        )
-        if opener_rebid_recommendation.bid == "Pass":
-            continue
-        if opener_rebid_bid is not None and opener_rebid_recommendation.bid != opener_rebid_bid:
-            continue
+            response_recommendation = recommend_response(
+                opening_recommendation.bid,
+                responder_evaluation,
+                settings,
+                vulnerability,
+            )
+            if response_recommendation.bid == "Pass":
+                continue
+            if response_bid is not None and response_recommendation.bid != response_bid:
+                continue
 
-        recommendation = recommend_responder_rebid(
-            opening_recommendation.bid,
-            response_recommendation.bid,
-            opener_rebid_recommendation.bid,
-            responder_evaluation,
-            settings,
-            vulnerability,
-        )
-        return TrainingQuestion(
-            hand=responder_hand,
-            evaluation=responder_evaluation,
-            recommendation=recommendation,
-            vulnerability=vulnerability,
-            choices=RESPONDER_REBID_BIDS,
-            legal_choices=legal_responder_rebid_bids(opener_rebid_recommendation.bid),
-            acceptable_bids=build_acceptable_bids(
-                recommendation.bid,
-                legal_responder_rebid_bids(opener_rebid_recommendation.bid),
-                mode="responder_rebid",
+            opener_rebid_recommendation = recommend_opener_rebid(
+                opening_recommendation.bid,
+                response_recommendation.bid,
+                opener_evaluation,
+                settings,
+                vulnerability,
+            )
+            if opener_rebid_recommendation.bid == "Pass":
+                continue
+            if opener_rebid_bid is not None and opener_rebid_recommendation.bid != opener_rebid_bid:
+                continue
+
+            recommendation = recommend_responder_rebid(
+                opening_recommendation.bid,
+                response_recommendation.bid,
+                opener_rebid_recommendation.bid,
+                responder_evaluation,
+                settings,
+                vulnerability,
+            )
+            return TrainingQuestion(
+                hand=responder_hand,
+                evaluation=responder_evaluation,
+                recommendation=recommendation,
+                vulnerability=vulnerability,
+                choices=RESPONDER_REBID_BIDS,
+                legal_choices=legal_responder_rebid_bids(opener_rebid_recommendation.bid),
+                acceptable_bids=build_acceptable_bids(
+                    recommendation.bid,
+                    legal_responder_rebid_bids(opener_rebid_recommendation.bid),
+                    mode="responder_rebid",
+                    opener_bid=opening_recommendation.bid,
+                    response_bid=response_recommendation.bid,
+                    opener_rebid_bid=opener_rebid_recommendation.bid,
+                ),
+                mode="应叫者第二次应叫训练",
+                auction=(
+                    f"{opening_recommendation.bid}-Pass-{response_recommendation.bid}-Pass-{opener_rebid_recommendation.bid}-Pass-? "
+                ),
                 opener_bid=opening_recommendation.bid,
                 response_bid=response_recommendation.bid,
                 opener_rebid_bid=opener_rebid_recommendation.bid,
-            ),
-            mode="应叫者第二次应叫训练",
-            auction=(
-                f"{opening_recommendation.bid}-Pass-{response_recommendation.bid}-Pass-{opener_rebid_recommendation.bid}-Pass-? "
-            ),
-            opener_bid=opening_recommendation.bid,
-            response_bid=response_recommendation.bid,
-            opener_rebid_bid=opener_rebid_recommendation.bid,
-        )
+            )
 
     if opener_rebid_bid is not None:
         return generate_responder_rebid_question(

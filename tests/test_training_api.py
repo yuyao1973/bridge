@@ -10,6 +10,8 @@ from bridge_trainer.cards import Card
 from bridge_trainer.evaluator import HandEvaluation
 from bridge_trainer.training import (
     DEFAULT_SEARCH_ATTEMPTS,
+    DIRECTED_OPENER_REBID_SEARCH_ATTEMPTS,
+    DIRECTED_RESPONDER_REBID_SEARCH_ATTEMPTS,
     PREEMPT_OPENINGS,
     RESPONSE_FILTER_SEARCH_ATTEMPTS,
     REBID_FILTER_SEARCH_ATTEMPTS,
@@ -17,10 +19,14 @@ from bridge_trainer.training import (
     TrainingQuestion,
     build_acceptable_bids,
     choose_vulnerability,
+    directed_sequence_attempt_budget,
     generate_opening_question,
     generate_opener_rebid_question,
     generate_responder_rebid_question,
     generate_response_question,
+    iter_role_pairs,
+    matches_common_opener_rebid_prefilter,
+    matches_common_responder_rebid_prefilter,
     supported_openings_for_category,
 )
 
@@ -200,6 +206,66 @@ class AcceptableBidTests(unittest.TestCase):
 
 
 class TrainingGenerationTests(unittest.TestCase):
+    @staticmethod
+    def _evaluation(hcp: int, spades: int, hearts: int, diamonds: int, clubs: int, balanced: bool = False) -> HandEvaluation:
+        lengths = {"S": spades, "H": hearts, "D": diamonds, "C": clubs}
+        longest = max(lengths.values())
+        return HandEvaluation(
+            hcp=hcp,
+            lengths=lengths,
+            shape=f"{spades}-{hearts}-{diamonds}-{clubs}",
+            balanced=balanced,
+            longest_suits=[suit for suit, length in lengths.items() if length == longest],
+        )
+
+    def test_common_opener_rebid_prefilter_matches_jacoby_two_nt_profile(self) -> None:
+        opener = self._evaluation(13, 2, 5, 3, 3, balanced=False)
+        responder = self._evaluation(13, 3, 4, 3, 3, balanced=True)
+        self.assertTrue(matches_common_opener_rebid_prefilter("1♥", "2NT", opener, responder, RuleSettings()))
+
+    def test_common_opener_rebid_prefilter_rejects_nontransfer_profile(self) -> None:
+        opener = self._evaluation(16, 3, 3, 4, 3, balanced=True)
+        responder = self._evaluation(8, 3, 4, 3, 3, balanced=True)
+        self.assertFalse(matches_common_opener_rebid_prefilter("1NT", "2♦", opener, responder, RuleSettings()))
+
+    def test_common_responder_rebid_prefilter_matches_stayman_deny_profile(self) -> None:
+        opener = self._evaluation(16, 3, 3, 4, 3, balanced=True)
+        responder = self._evaluation(9, 4, 4, 3, 2, balanced=False)
+        self.assertTrue(matches_common_responder_rebid_prefilter("1NT", "2♣", "2♦", opener, responder, RuleSettings()))
+
+    def test_common_responder_rebid_prefilter_rejects_wrong_stayman_answer_profile(self) -> None:
+        opener = self._evaluation(16, 3, 4, 3, 3, balanced=True)
+        responder = self._evaluation(9, 4, 4, 3, 2, balanced=False)
+        self.assertFalse(matches_common_responder_rebid_prefilter("1NT", "2♣", "2♦", opener, responder, RuleSettings()))
+
+    def test_directed_sequence_attempt_budget_for_two_bid_target(self) -> None:
+        attempts = directed_sequence_attempt_budget(opener_bid="1NT", response_bid="2♣")
+        self.assertGreaterEqual(attempts, DIRECTED_OPENER_REBID_SEARCH_ATTEMPTS)
+
+    def test_directed_sequence_attempt_budget_for_three_bid_target(self) -> None:
+        attempts = directed_sequence_attempt_budget(opener_bid="1NT", response_bid="2♣", opener_rebid_bid="2♦")
+        self.assertGreaterEqual(attempts, DIRECTED_RESPONDER_REBID_SEARCH_ATTEMPTS)
+
+    def test_iter_role_pairs_includes_all_pairs_when_prioritized(self) -> None:
+        hands = {
+            "N": [Card("S", "A")],
+            "E": [Card("S", "K")],
+            "S": [Card("S", "Q")],
+            "W": [Card("S", "J")],
+        }
+        pairs = iter_role_pairs(hands, prioritize_sequence=True, default_opener="S", default_responder="N")
+        self.assertEqual(len(pairs), 12)
+
+    def test_iter_role_pairs_only_default_pair_without_priority(self) -> None:
+        hands = {
+            "N": [Card("S", "A")],
+            "E": [Card("S", "K")],
+            "S": [Card("S", "Q")],
+            "W": [Card("S", "J")],
+        }
+        pairs = iter_role_pairs(hands, prioritize_sequence=False, default_opener="S", default_responder="N")
+        self.assertEqual(len(pairs), 1)
+
     def test_opening_question_generation_has_consistent_fields(self) -> None:
         question = generate_opening_question(seed=100, settings=RuleSettings())
         self.assertEqual(question.mode, "开叫训练")
@@ -288,29 +354,35 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.opener_bid, "1♥")
         self.assertEqual(question.response_bid, "2NT")
 
-    def test_generate_opener_rebid_question_searches_beyond_default_budget_for_filtered_sequence(self) -> None:
-        target_offset = DEFAULT_SEARCH_ATTEMPTS + 25
-        opening_calls = {"count": 0}
+    def test_generate_opener_rebid_question_common_prefilter_can_hit_before_default_budget(self) -> None:
+        target_offset = 25
+        eval_calls = {"count": 0}
+        good_opener = self._evaluation(13, 2, 5, 3, 3, balanced=False)
+        good_responder = self._evaluation(13, 3, 4, 3, 3, balanced=True)
+        bad_eval = self._evaluation(7, 3, 3, 4, 3, balanced=True)
 
-        def opening_side_effect(*_args, **_kwargs):
-            current = opening_calls["count"]
-            opening_calls["count"] += 1
-            return BidRecommendation("1♥" if current == target_offset else "1♣", "x", "x")
+        def evaluate_side_effect(_hand):
+            current = eval_calls["count"]
+            eval_calls["count"] += 1
+            loop_index = current // 2
+            if loop_index == target_offset:
+                return good_opener if current % 2 == 0 else good_responder
+            return bad_eval
 
-        with patch("bridge_trainer.training.recommend_opening", side_effect=opening_side_effect):
-            with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("2NT", "x", "x")):
-                with patch("bridge_trainer.training.recommend_opener_rebid", return_value=BidRecommendation("4♥", "x", "x")):
-                    question = generate_opener_rebid_question(
-                        seed=100,
-                        settings=RuleSettings(),
-                        opener_bid="1♥",
-                        response_bid="2NT",
-                    )
+        with patch("bridge_trainer.training.evaluate_hand", side_effect=evaluate_side_effect):
+            with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("1♥", "x", "x")):
+                with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("2NT", "x", "x")):
+                    with patch("bridge_trainer.training.recommend_opener_rebid", return_value=BidRecommendation("4♥", "x", "x")):
+                        question = generate_opener_rebid_question(
+                            seed=100,
+                            settings=RuleSettings(),
+                            opener_bid="1♥",
+                            response_bid="2NT",
+                        )
         self.assertEqual(question.mode, "开叫者再叫训练")
         self.assertEqual(question.opener_bid, "1♥")
         self.assertEqual(question.response_bid, "2NT")
-        self.assertGreater(opening_calls["count"], DEFAULT_SEARCH_ATTEMPTS)
-        self.assertLessEqual(opening_calls["count"], RESPONSE_FILTER_SEARCH_ATTEMPTS)
+        self.assertLess(eval_calls["count"], DEFAULT_SEARCH_ATTEMPTS * 2)
 
     def test_opener_rebid_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
         question = generate_opener_rebid_question(seed=100, settings=RuleSettings(), opener_bid="7NT")
@@ -358,32 +430,38 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.response_bid, "2♣")
 
-    def test_generate_responder_rebid_question_searches_beyond_default_budget_for_three_bid_sequence(self) -> None:
-        target_offset = DEFAULT_SEARCH_ATTEMPTS + 40
-        opening_calls = {"count": 0}
+    def test_generate_responder_rebid_question_common_prefilter_can_hit_before_default_budget(self) -> None:
+        target_offset = 40
+        eval_calls = {"count": 0}
+        good_opener = self._evaluation(16, 3, 3, 4, 3, balanced=True)
+        good_responder = self._evaluation(9, 4, 4, 3, 2, balanced=False)
+        bad_eval = self._evaluation(7, 3, 3, 4, 3, balanced=True)
 
-        def opening_side_effect(*_args, **_kwargs):
-            current = opening_calls["count"]
-            opening_calls["count"] += 1
-            return BidRecommendation("1NT" if current == target_offset else "1♣", "x", "x")
+        def evaluate_side_effect(_hand):
+            current = eval_calls["count"]
+            eval_calls["count"] += 1
+            loop_index = current // 2
+            if loop_index == target_offset:
+                return good_opener if current % 2 == 0 else good_responder
+            return bad_eval
 
-        with patch("bridge_trainer.training.recommend_opening", side_effect=opening_side_effect):
-            with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("2♣", "x", "x")):
-                with patch("bridge_trainer.training.recommend_opener_rebid", return_value=BidRecommendation("2♦", "x", "x")):
-                    with patch("bridge_trainer.training.recommend_responder_rebid", return_value=BidRecommendation("3NT", "x", "x")):
-                        question = generate_responder_rebid_question(
-                            seed=100,
-                            settings=RuleSettings(),
-                            opener_bid="1NT",
-                            response_bid="2♣",
-                            opener_rebid_bid="2♦",
-                        )
+        with patch("bridge_trainer.training.evaluate_hand", side_effect=evaluate_side_effect):
+            with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("1NT", "x", "x")):
+                with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("2♣", "x", "x")):
+                    with patch("bridge_trainer.training.recommend_opener_rebid", return_value=BidRecommendation("2♦", "x", "x")):
+                        with patch("bridge_trainer.training.recommend_responder_rebid", return_value=BidRecommendation("3NT", "x", "x")):
+                            question = generate_responder_rebid_question(
+                                seed=100,
+                                settings=RuleSettings(),
+                                opener_bid="1NT",
+                                response_bid="2♣",
+                                opener_rebid_bid="2♦",
+                            )
         self.assertEqual(question.mode, "应叫者第二次应叫训练")
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.response_bid, "2♣")
         self.assertEqual(question.opener_rebid_bid, "2♦")
-        self.assertGreater(opening_calls["count"], DEFAULT_SEARCH_ATTEMPTS)
-        self.assertLessEqual(opening_calls["count"], REBID_FILTER_SEARCH_ATTEMPTS)
+        self.assertLess(eval_calls["count"], DEFAULT_SEARCH_ATTEMPTS * 2)
 
     def test_responder_rebid_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
         question = generate_responder_rebid_question(seed=100, settings=RuleSettings(), opener_bid="7NT")

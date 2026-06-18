@@ -18,6 +18,7 @@ from bridge_trainer.bidding import (
     negative_double_target_majors,
     next_legal_contract,
     parse_contract_bid,
+    is_reverse_second_suit,
     recommend_opener_rebid,
     recommend_opening,
     recommend_responder_rebid,
@@ -463,10 +464,25 @@ class RebidRecommendationTests(unittest.TestCase):
         self.assertEqual(recommend_opener_rebid("1♦", "1♥", hand, vulnerability=VULNERABILITY).bid, "2♦")
 
     def test_opener_rebid_chooses_second_suit_when_available(self) -> None:
-        hand = evaluation(13, 4, 3, 1, 5, balanced=False)
-        result = recommend_opener_rebid("1♣", "1♥", hand, vulnerability=VULNERABILITY)
-        self.assertEqual(result.bid, "2♠")
+        hand = evaluation(13, 3, 5, 1, 4, balanced=False)
+        result = recommend_opener_rebid("1♥", "1♠", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♣")
         self.assertEqual(result.rule_name, "再叫第二套")
+
+    def test_reverse_second_suit_requires_extra_strength(self) -> None:
+        hand = evaluation(14, 2, 2, 4, 5, balanced=False)
+        result = recommend_opener_rebid("1♣", "1NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♣")
+
+    def test_reverse_second_suit_allowed_with_sufficient_hcp(self) -> None:
+        hand = evaluation(16, 2, 2, 4, 5, balanced=False)
+        result = recommend_opener_rebid("1♣", "1NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♦")
+        self.assertEqual(result.rule_name, "逆叫第二套")
+
+    def test_reverse_detection_helper(self) -> None:
+        self.assertTrue(is_reverse_second_suit("1♣", "1NT", "2♦"))
+        self.assertFalse(is_reverse_second_suit("1♥", "1♠", "2♣"))
 
     def test_opener_rebid_fallbacks_to_lowest_legal_contract(self) -> None:
         hand = evaluation(10, 2, 3, 3, 5, balanced=False)

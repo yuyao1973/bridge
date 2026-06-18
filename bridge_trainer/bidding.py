@@ -592,10 +592,25 @@ def recommend_opener_rebid(
                 "重复开叫花色",
             )
 
-    second_suit = choose_second_suit(lengths, opener_suit, response_suit, response_bid)
+    reverse_min_hcp = 16
+    second_suit = choose_second_suit(
+        lengths,
+        opener_suit,
+        response_suit,
+        opening_bid,
+        response_bid,
+        hcp,
+        reverse_min_hcp,
+    )
     if second_suit is not None:
         bid = minimum_legal_bid_for_suit(second_suit, response_bid, minimum_level=2)
         if bid is not None:
+            if is_reverse_second_suit(opening_bid, response_bid, bid):
+                return BidRecommendation(
+                    bid,
+                    f"你开叫 {opening_bid} 后再叫新花 {bid}，属于逆叫；你有 {hcp} HCP，达到逆叫常见门槛（约 {reverse_min_hcp}+ HCP），并有 4 张以上第二套 {SUIT_NAMES[second_suit]}。牌型：{length_text}。",
+                    "逆叫第二套",
+                )
             return BidRecommendation(
                 bid,
                 f"你开叫 {opening_bid} 后还有 4 张以上第二套 {SUIT_NAMES[second_suit]}，再叫新花 {bid} 描述牌型。牌型：{length_text}。",
@@ -628,17 +643,49 @@ def choose_raise_level(response_level: int, hcp: int) -> int:
 
 
 def choose_second_suit(
-    lengths: dict[str, int], opener_suit: str | None, response_suit: str | None, response_bid: str
+    lengths: dict[str, int],
+    opener_suit: str | None,
+    response_suit: str | None,
+    opening_bid: str,
+    response_bid: str,
+    hcp: int,
+    reverse_min_hcp: int,
 ) -> str | None:
     candidates: list[str] = []
     for suit in ["S", "H", "D", "C"]:
         if suit in {opener_suit, response_suit}:
             continue
-        if lengths[suit] >= 4 and minimum_legal_bid_for_suit(suit, response_bid, minimum_level=2) is not None:
+        if lengths[suit] < 4:
+            continue
+        bid = minimum_legal_bid_for_suit(suit, response_bid, minimum_level=2)
+        if bid is None:
+            continue
+        if is_reverse_second_suit(opening_bid, response_bid, bid) and hcp < reverse_min_hcp:
+            continue
+        if bid is not None:
             candidates.append(suit)
     if not candidates:
         return None
     return max(candidates, key=lambda suit: (lengths[suit], ["C", "D", "H", "S"].index(suit)))
+
+
+def is_reverse_second_suit(opening_bid: str, response_bid: str, rebid_bid: str) -> bool:
+    opening_contract = parse_contract_bid(opening_bid)
+    response_contract = parse_contract_bid(response_bid)
+    rebid_contract = parse_contract_bid(rebid_bid)
+    if opening_contract is None or response_contract is None or rebid_contract is None:
+        return False
+
+    opening_level, opening_strain = opening_contract
+    response_level, _ = response_contract
+    rebid_level, rebid_strain = rebid_contract
+    if opening_level != 1 or response_level != 1:
+        return False
+    if rebid_level != 2:
+        return False
+    if opening_strain == "NT" or rebid_strain == "NT":
+        return False
+    return STRAIN_ORDER[rebid_strain] > STRAIN_ORDER[opening_strain]
 
 
 def minimum_legal_bid_for_suit(suit: str, previous_bid: str, minimum_level: int = 1) -> str | None:

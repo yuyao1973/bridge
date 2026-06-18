@@ -206,8 +206,8 @@ def init_state() -> None:
         st.session_state.selected_bid = "Pass"
     if "total" not in st.session_state:
         st.session_state.total = 0
-    if "correct" not in st.session_state:
-        st.session_state.correct = 0
+    if "score" not in st.session_state:
+        st.session_state.score = 0
     if "auction_clicked_bid" not in st.session_state:
         st.session_state.auction_clicked_bid = None
     if "auction_clicked_meaning" not in st.session_state:
@@ -402,8 +402,11 @@ def submit_answer() -> None:
         "acceptable_bids",
         [st.session_state.question.recommendation.bid],
     )
-    if st.session_state.selected_bid in acceptable:
-        st.session_state.correct += 1
+    # Award 2 points for recommended bid, 1 for acceptable alternative, 0 for wrong
+    if st.session_state.selected_bid == st.session_state.question.recommendation.bid:
+        st.session_state.score += 2
+    elif st.session_state.selected_bid in acceptable:
+        st.session_state.score += 1
 
 
 def render_hand(question: TrainingQuestion) -> None:
@@ -425,13 +428,13 @@ def render_feedback(question: TrainingQuestion) -> None:
     selected = st.session_state.selected_bid
     acceptable = getattr(question, "acceptable_bids", [recommendation.bid])
     if selected == recommendation.bid:
-        st.success(f"正确：推荐叫品是 {recommendation.bid}")
+        st.success(f"✓ 正确：推荐叫品是 {recommendation.bid} （+2 分）")
     elif selected in acceptable:
         alternatives = [bid for bid in acceptable if bid != recommendation.bid]
         alt_text = f"（可接受：{', '.join(alternatives)}）" if alternatives else ""
-        st.warning(f"可接受次优：你选择了 {selected}，主推仍是 {recommendation.bid}{alt_text}")
+        st.warning(f"⚠ 可接受次优：你选择了 {selected}，主推仍是 {recommendation.bid}{alt_text} （+1 分）")
     else:
-        st.error(f"不太合适：你选择了 {selected}，推荐叫品是 {recommendation.bid}")
+        st.error(f"✗ 不太合适：你选择了 {selected}，推荐叫品是 {recommendation.bid} （0 分）")
     st.info(recommendation.explanation)
     st.caption(f"规则：{recommendation.rule_name}")
 
@@ -536,7 +539,12 @@ def contextual_response_meaning(bid: str, auction_bids: list[str]) -> str | None
             return f"在 {seq} 中，3NT 通常是直接无将进局。"
         return f"在 {seq} 中，这是 1NT 体系下的应叫，用于处理高花配合与定约层级。"
 
+    # Bergen加叫识别：高花开叫后的3C/3D是约定性Bergen加叫
     if opening[1] in {"♥", "♠"}:
+        if bid == "3♣":
+            return f"在 {seq} 中，3♣ 是 Bergen 弱支持，通常表示 4 张{opening[1]}支持且点数较弱（6-9 HCP）。"
+        if bid == "3♦":
+            return f"在 {seq} 中，3♦ 是 Bergen 中等支持，通常表示 4 张{opening[1]}支持且点数中等（10-11 HCP）。"
         if response[1] == opening[1]:
             return f"在 {seq} 中，应叫同花通常表示支持同伴高花并按牌力分层。"
         if bid == "1NT":
@@ -556,6 +564,15 @@ def contextual_opener_rebid_meaning(bid: str, auction_bids: list[str]) -> str | 
         return "再叫：根据前序叫牌继续描述牌力与牌型"
 
     seq = f"{auction_bids[0]}-{auction_bids[1]}"
+    
+    # Bergen加叫识别：高花开叫后的3C/3D是约定性Bergen加叫而非新花
+    if opening[1] in {"♥", "♠"}:
+        response_bid = auction_bids[1]
+        if response_bid == "3♣":
+            return f"在 {seq} 中，3♣ 是 Bergen 弱支持，通常表示 4 张{opening[1]}支持且点数较弱（6-9 HCP）。"
+        if response_bid == "3♦":
+            return f"在 {seq} 中，3♦ 是 Bergen 中等支持，通常表示 4 张{opening[1]}支持且点数中等（10-11 HCP）。"
+    
     if opening[1] == "NT":
         response_bid = auction_bids[1]
         if response_bid == "2♣":
@@ -763,8 +780,9 @@ def render_auction_with_meaning(question: TrainingQuestion) -> None:
 
 def render_stats() -> None:
     total = st.session_state.total
-    correct = st.session_state.correct
-    rate = correct / total * 100 if total else 0
+    score = st.session_state.score
+    # Calculate percentage based on total points (max 2 points per question)
+    rate = score / (total * 2) * 100 if total else 0
     st.sidebar.header("训练统计")
     st.sidebar.radio(
         "训练模式",
@@ -946,11 +964,11 @@ def render_stats() -> None:
         )
         st.button("恢复默认规则", on_click=reset_rules)
     st.sidebar.metric("已答题", total)
-    st.sidebar.metric("正确", correct)
-    st.sidebar.metric("正确率", f"{rate:.1f}%")
+    st.sidebar.metric("总分", score)
+    st.sidebar.metric("得分率", f"{rate:.1f}%")
     if st.sidebar.button("重置统计"):
         st.session_state.total = 0
-        st.session_state.correct = 0
+        st.session_state.score = 0
         st.session_state.submitted = False
 
 

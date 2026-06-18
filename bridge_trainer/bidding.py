@@ -54,6 +54,10 @@ RESPONSE_BIDS = [
 
 REBID_BIDS = [
     "Pass",
+    "1♣",
+    "1♦",
+    "1♥",
+    "1♠",
     "1NT",
     "2♣",
     "2♦",
@@ -590,7 +594,7 @@ def recommend_opener_rebid(
 
     second_suit = choose_second_suit(lengths, opener_suit, response_suit, response_bid)
     if second_suit is not None:
-        bid = minimum_legal_bid_for_suit(second_suit, response_bid)
+        bid = minimum_legal_bid_for_suit(second_suit, response_bid, minimum_level=2)
         if bid is not None:
             return BidRecommendation(
                 bid,
@@ -630,7 +634,7 @@ def choose_second_suit(
     for suit in ["S", "H", "D", "C"]:
         if suit in {opener_suit, response_suit}:
             continue
-        if lengths[suit] >= 4 and minimum_legal_bid_for_suit(suit, response_bid) is not None:
+        if lengths[suit] >= 4 and minimum_legal_bid_for_suit(suit, response_bid, minimum_level=2) is not None:
             candidates.append(suit)
     if not candidates:
         return None

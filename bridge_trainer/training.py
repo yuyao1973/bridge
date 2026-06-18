@@ -170,7 +170,7 @@ def generate_opener_rebid_question(
                 response_bid=response_recommendation.bid,
             ),
             mode="开叫者再叫训练",
-            auction=f"{opening_recommendation.bid}-Pass-{response_recommendation.bid}-Pass-? ",
+            auction=f"{opening_recommendation.bid}-{response_recommendation.bid}-? ",
             opener_bid=opening_recommendation.bid,
             response_bid=response_recommendation.bid,
         )

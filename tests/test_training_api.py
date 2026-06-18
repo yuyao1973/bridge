@@ -195,7 +195,7 @@ class TrainingGenerationTests(unittest.TestCase):
         question = generate_opener_rebid_question(seed=100, settings=RuleSettings(), opener_bid="1NT")
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.mode, "开叫者再叫训练")
-        self.assertTrue(question.auction.startswith("1NT-Pass-"))
+        self.assertTrue(question.auction.startswith("1NT-"))
 
     def test_generate_opener_rebid_question_skips_pass_response_for_non_preempt(self) -> None:
         sentinel = generate_opening_question(seed=100, settings=RuleSettings())

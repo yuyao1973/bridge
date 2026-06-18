@@ -116,6 +116,17 @@ class AcceptableBidTests(unittest.TestCase):
         self.assertIn("2♣", bids)
         self.assertIn("1NT", bids)
 
+    def test_opener_rebid_two_level_new_suit_accepts_repeat_major(self) -> None:
+        bids = build_acceptable_bids(
+            "2♣",
+            ["Pass", "2♣", "2♥", "2NT", "3♣"],
+            mode="opener_rebid",
+            opener_bid="1♥",
+            response_bid="1♠",
+        )
+        self.assertIn("2♣", bids)
+        self.assertIn("2♥", bids)
+
     def test_opener_rebid_one_nt_after_one_level_sequence_accepts_two_clubs(self) -> None:
         bids = build_acceptable_bids(
             "1NT",

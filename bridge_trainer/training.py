@@ -337,6 +337,15 @@ def build_acceptable_bids(
             add_if_legal("1NT")
 
         if (
+            rec_level == 2
+            and rec_strain in {"♣", "♦", "♥", "♠"}
+            and opener_contract is not None
+            and opener_contract[0] == 1
+            and opener_contract[1] in {"♥", "♠"}
+        ):
+            add_if_legal(f"2{opener_contract[1]}")
+
+        if (
             recommended_bid == "1NT"
             and opener_contract is not None
             and response_contract is not None

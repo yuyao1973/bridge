@@ -475,6 +475,12 @@ class RebidRecommendationTests(unittest.TestCase):
         self.assertEqual(result.bid, "1♠")
         self.assertEqual(result.rule_name, "再叫第二套")
 
+    def test_opener_rebid_six_five_shape_prefers_second_suit_over_repeat(self) -> None:
+        hand = evaluation(12, 0, 6, 2, 5, balanced=False)
+        result = recommend_opener_rebid("1♥", "1♠", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♣")
+        self.assertEqual(result.rule_name, "再叫第二套")
+
     def test_opener_rebid_after_one_diamond_one_heart_prefers_one_nt_over_two_clubs(self) -> None:
         hand = evaluation(14, 2, 2, 5, 4, balanced=False)
         result = recommend_opener_rebid("1♦", "1♥", hand, vulnerability=VULNERABILITY)
@@ -513,6 +519,18 @@ class RebidRecommendationTests(unittest.TestCase):
         result = recommend_opener_rebid("1♦", "1NT", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "Pass")
         self.assertEqual(result.rule_name, "1NT 应叫后最低限止叫")
+
+    def test_opener_rebid_after_bergen_raise_with_strong_hand_goes_to_game(self) -> None:
+        hand = evaluation(21, 2, 5, 2, 4, balanced=False)
+        result = recommend_opener_rebid("1♥", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "Bergen 后支持开叫高花")
+
+    def test_opener_rebid_after_bergen_weak_raise_with_minimum_prefers_three_major(self) -> None:
+        hand = evaluation(12, 4, 5, 2, 2, balanced=False)
+        result = recommend_opener_rebid("1♥", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♥")
+        self.assertEqual(result.rule_name, "Bergen 后支持开叫高花")
 
     def test_two_nt_stayman_rebid_answers_hearts(self) -> None:
         hand = evaluation(20, 3, 4, 3, 3)

@@ -561,6 +561,24 @@ def recommend_opener_rebid(
         if response_bid == "3♥" and settings.transfers_enabled and is_legal_response_bid(response_bid, "3♠"):
             return BidRecommendation("3♠", f"2NT-3♥ 序列中，3♥ 为黑桃转移，开叫者应接受转移叫 3♠。牌型：{length_text}。", "2NT 后接受黑桃转移")
 
+    # Bergen 加叫：1♥/1♠ 开叫后，3♣/3♦ 视作对开叫高花的支持。
+    # 常见简化分档：
+    # - 3♣（弱支持，约 6-9）：开叫方 12-15 以 3M 再叫，16+ 进局 4M。
+    # - 3♦（中等支持，约 10-11）：开叫方 14+ 倾向进局 4M，否则 3M。
+    if opening_bid in {"1♥", "1♠"} and response_bid in {"3♣", "3♦"} and opener_suit in {"H", "S"}:
+        if response_bid == "3♣":
+            target_level = 4 if hcp >= 16 else 3
+        else:
+            target_level = 4 if hcp >= 14 else 3
+
+        bid = f"{target_level}{suit_symbol(opener_suit)}"
+        if is_legal_response_bid(response_bid, bid):
+            return BidRecommendation(
+                bid,
+                f"同伴以 Bergen 加叫 {response_bid} 显示对 {SUIT_NAMES[opener_suit]} 的支持；你有 {hcp} HCP，按 Bergen 分档选择 {bid}。牌型：{length_text}。",
+                "Bergen 后支持开叫高花",
+            )
+
     # 一阶开叫后同伴 1NT 应叫，最低限均型通常以止叫为主。
     if opening_level == 1 and response_bid == "1NT" and evaluation.balanced and hcp <= 14:
         return BidRecommendation(
@@ -613,15 +631,6 @@ def recommend_opener_rebid(
                 "一阶序列低限再叫 1NT",
             )
 
-    if opener_suit is not None and lengths[opener_suit] >= 6:
-        bid = minimum_legal_bid_for_suit(opener_suit, response_bid, minimum_level=2)
-        if bid is not None:
-            return BidRecommendation(
-                bid,
-                f"你开叫 {opening_bid} 后持有 {lengths[opener_suit]} 张 {SUIT_NAMES[opener_suit]}，无更优支持或无将再叫，重复自己长套 {bid}。牌型：{length_text}。",
-                "重复开叫花色",
-            )
-
     reverse_min_hcp = 16
     second_suit = choose_second_suit(
         lengths,
@@ -632,6 +641,31 @@ def recommend_opener_rebid(
         hcp,
         reverse_min_hcp,
     )
+
+    # 6-5 两套型时优先展示第二套，避免过早重复开叫花色。
+    if (
+        opener_suit is not None
+        and lengths[opener_suit] >= 6
+        and second_suit is not None
+        and lengths[second_suit] >= 5
+    ):
+        bid = minimum_legal_bid_for_suit(second_suit, response_bid, minimum_level=1)
+        if bid is not None:
+            return BidRecommendation(
+                bid,
+                f"你开叫 {opening_bid} 后为 6-5 两套型（{SUIT_NAMES[opener_suit]} {lengths[opener_suit]} 张、{SUIT_NAMES[second_suit]} {lengths[second_suit]} 张），优先再叫第二套 {bid} 描述分布。牌型：{length_text}。",
+                "再叫第二套",
+            )
+
+    if opener_suit is not None and lengths[opener_suit] >= 6:
+        bid = minimum_legal_bid_for_suit(opener_suit, response_bid, minimum_level=2)
+        if bid is not None:
+            return BidRecommendation(
+                bid,
+                f"你开叫 {opening_bid} 后持有 {lengths[opener_suit]} 张 {SUIT_NAMES[opener_suit]}，无更优支持或无将再叫，重复自己长套 {bid}。牌型：{length_text}。",
+                "重复开叫花色",
+            )
+
     if second_suit is not None:
         bid = minimum_legal_bid_for_suit(second_suit, response_bid, minimum_level=1)
         if bid is not None:

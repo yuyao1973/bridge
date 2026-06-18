@@ -1060,7 +1060,7 @@ def recommend_response_to_major(
             "高花邀局加叫",
         )
 
-    if lengths[major] >= 3 and hcp <= settings.responder_simple_raise_max:
+    if lengths[major] >= 3 and simple_low <= hcp <= settings.responder_simple_raise_max:
         return BidRecommendation(
             f"2{major_bid}",
             f"同伴开 1{major_bid}，你有 {hcp} HCP 和 3 张支持，简单加叫到 2{major_bid}。牌型：{length_text}。",

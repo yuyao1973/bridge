@@ -19,11 +19,13 @@ from bridge_trainer.training import (
     TrainingQuestion,
     build_acceptable_bids,
     choose_vulnerability,
+    deal_targeted,
     directed_sequence_attempt_budget,
     generate_opening_question,
     generate_opener_rebid_question,
     generate_responder_rebid_question,
     generate_response_question,
+    get_sequence_constraints,
     iter_role_pairs,
     matches_common_opener_rebid_prefilter,
     matches_common_responder_rebid_prefilter,
@@ -265,6 +267,52 @@ class TrainingGenerationTests(unittest.TestCase):
         }
         pairs = iter_role_pairs(hands, prioritize_sequence=False, default_opener="S", default_responder="N")
         self.assertEqual(len(pairs), 1)
+
+    def test_deal_targeted_finds_nt1_stayman_pair(self) -> None:
+        settings = RuleSettings()
+        constraints = get_sequence_constraints("1NT", "2\u2663", None, settings)
+        self.assertIsNotNone(constraints)
+        opener_c, responder_c = constraints  # type: ignore[misc]
+        result = deal_targeted(opener_c, responder_c, seed=42)
+        self.assertIsNotNone(result)
+        opener_hand, responder_hand = result  # type: ignore[misc]
+        self.assertTrue(opener_c(opener_hand))
+        self.assertTrue(responder_c(responder_hand))
+
+    def test_deal_targeted_finds_transfer_to_hearts_pair(self) -> None:
+        settings = RuleSettings()
+        constraints = get_sequence_constraints("1NT", "2\u2666", None, settings)
+        self.assertIsNotNone(constraints)
+        opener_c, responder_c = constraints  # type: ignore[misc]
+        result = deal_targeted(opener_c, responder_c, seed=7)
+        self.assertIsNotNone(result)
+        _, responder_hand = result  # type: ignore[misc]
+        from bridge_trainer.evaluator import evaluate_hand as _ev
+        self.assertGreaterEqual(_ev(responder_hand).lengths["H"], 5)
+
+    def test_get_sequence_constraints_returns_none_for_unknown_sequence(self) -> None:
+        constraints = get_sequence_constraints("1\u2663", "1\u2666", None, RuleSettings())
+        self.assertIsNone(constraints)
+
+    def test_get_sequence_constraints_returns_constraints_for_stayman_no_major(self) -> None:
+        settings = RuleSettings()
+        constraints = get_sequence_constraints("1NT", "2\u2663", "2\u2666", settings)
+        self.assertIsNotNone(constraints)
+
+    def test_generate_opener_rebid_question_fast_path_returns_matching_sequence(self) -> None:
+        q = generate_opener_rebid_question(seed=1, opener_bid="1NT", response_bid="2\u2663", settings=RuleSettings())
+        self.assertEqual(q.opener_bid, "1NT")
+        self.assertEqual(q.response_bid, "2\u2663")
+        self.assertEqual(q.mode, "\u5f00\u53eb\u8005\u518d\u53eb\u8bad\u7ec3")
+
+    def test_generate_responder_rebid_question_fast_path_returns_matching_sequence(self) -> None:
+        q = generate_responder_rebid_question(
+            seed=1, opener_bid="1NT", response_bid="2\u2663", opener_rebid_bid="2\u2666",
+            settings=RuleSettings(),
+        )
+        self.assertEqual(q.opener_bid, "1NT")
+        self.assertEqual(q.response_bid, "2\u2663")
+        self.assertEqual(q.opener_rebid_bid, "2\u2666")
 
     def test_opening_question_generation_has_consistent_fields(self) -> None:
         question = generate_opening_question(seed=100, settings=RuleSettings())

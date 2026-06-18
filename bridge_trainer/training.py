@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
+from typing import Callable
 
 from .bidding import (
     OPENING_BIDS,
@@ -19,7 +21,7 @@ from .bidding import (
     recommend_responder_rebid,
     recommend_response,
 )
-from .cards import Hand, deal
+from .cards import Hand, deal, new_deck, sort_hand
 from .evaluator import HandEvaluation, evaluate_hand
 
 
@@ -219,6 +221,128 @@ def iter_role_pairs(hands: dict[str, Hand], prioritize_sequence: bool, default_o
     return pairs
 
 
+HandConstraint = Callable[[Hand], bool]
+
+
+def deal_targeted(
+    opener_constraint: HandConstraint,
+    responder_constraint: HandConstraint,
+    seed: int,
+    max_opener_attempts: int = 3_000,
+    max_responder_attempts: int = 500,
+) -> tuple[Hand, Hand] | None:
+    """Fast path: build (opener_hand, responder_hand) both satisfying shape/HCP constraints."""
+    rng = random.Random(seed)
+    deck = new_deck()
+    for _ in range(max_opener_attempts):
+        rng.shuffle(deck)
+        opener_hand = sort_hand(deck[:13])
+        if not opener_constraint(opener_hand):
+            continue
+        remaining = list(deck[13:])
+        for _ in range(max_responder_attempts):
+            rng.shuffle(remaining)
+            responder_hand = sort_hand(remaining[:13])
+            if responder_constraint(responder_hand):
+                return opener_hand, responder_hand
+    return None
+
+
+def get_sequence_constraints(
+    opener_bid: str | None,
+    response_bid: str | None,
+    opener_rebid_bid: str | None,
+    settings: RuleSettings,
+) -> tuple[HandConstraint, HandConstraint] | None:
+    """Return (opener_constraint, responder_constraint) for a known directed sequence, or None."""
+    if opener_bid is None or response_bid is None:
+        return None
+
+    def nt1(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.balanced and settings.one_nt_min <= ev.hcp <= settings.one_nt_max
+
+    def nt1_no_major(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.balanced and settings.one_nt_min <= ev.hcp <= settings.one_nt_max and ev.lengths["H"] < 4 and ev.lengths["S"] < 4
+
+    def nt1_four_hearts(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.balanced and settings.one_nt_min <= ev.hcp <= settings.one_nt_max and ev.lengths["H"] >= 4
+
+    def nt1_four_spades_no_hearts(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.balanced and settings.one_nt_min <= ev.hcp <= settings.one_nt_max and ev.lengths["S"] >= 4 and ev.lengths["H"] < 4
+
+    def nt2(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.balanced and 20 <= ev.hcp <= 21
+
+    def stayman_responder(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.hcp >= 8 and (ev.lengths["H"] >= 4 or ev.lengths["S"] >= 4)
+
+    def transfer_hearts_responder(hand: Hand) -> bool:
+        return evaluate_hand(hand).lengths["H"] >= 5
+
+    def transfer_spades_responder(hand: Hand) -> bool:
+        return evaluate_hand(hand).lengths["S"] >= 5
+
+    def hearts5_opener(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.lengths["H"] >= 5 and 12 <= ev.hcp <= 21
+
+    def spades5_opener(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.lengths["S"] >= 5 and 12 <= ev.hcp <= 21
+
+    def jacoby_hearts_responder(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.hcp >= 12 and ev.lengths["H"] >= 4
+
+    def jacoby_spades_responder(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.hcp >= 12 and ev.lengths["S"] >= 4
+
+    if opener_rebid_bid is None:
+        # 2-bid sequences: opener rebid training
+        if opener_bid == "1NT" and response_bid == "2\u2663":
+            return nt1, stayman_responder
+        if opener_bid == "1NT" and response_bid == "2\u2666" and settings.transfers_enabled:
+            return nt1, transfer_hearts_responder
+        if opener_bid == "1NT" and response_bid == "2\u2665" and settings.transfers_enabled:
+            return nt1, transfer_spades_responder
+        if opener_bid == "2NT" and response_bid == "3\u2663":
+            return nt2, stayman_responder
+        if opener_bid == "2NT" and response_bid == "3\u2666" and settings.transfers_enabled:
+            return nt2, transfer_hearts_responder
+        if opener_bid == "2NT" and response_bid == "3\u2665" and settings.transfers_enabled:
+            return nt2, transfer_spades_responder
+        if opener_bid == "1\u2665" and response_bid == "2NT" and settings.jacoby_2nt_enabled:
+            return hearts5_opener, jacoby_hearts_responder
+        if opener_bid == "1\u2660" and response_bid == "2NT" and settings.jacoby_2nt_enabled:
+            return spades5_opener, jacoby_spades_responder
+    else:
+        # 3-bid sequences: responder rebid training
+        if opener_bid == "1NT" and response_bid == "2\u2663":
+            if opener_rebid_bid == "2\u2666":
+                return nt1_no_major, stayman_responder
+            if opener_rebid_bid == "2\u2665":
+                return nt1_four_hearts, stayman_responder
+            if opener_rebid_bid == "2\u2660":
+                return nt1_four_spades_no_hearts, stayman_responder
+        if opener_bid == "1NT" and response_bid == "2\u2666" and settings.transfers_enabled:
+            return nt1, transfer_hearts_responder
+        if opener_bid == "1NT" and response_bid == "2\u2665" and settings.transfers_enabled:
+            return nt1, transfer_spades_responder
+        if opener_bid == "1\u2665" and response_bid == "2NT" and settings.jacoby_2nt_enabled:
+            return hearts5_opener, jacoby_hearts_responder
+        if opener_bid == "1\u2660" and response_bid == "2NT" and settings.jacoby_2nt_enabled:
+            return spades5_opener, jacoby_spades_responder
+
+    return None
+
+
 def generate_opening_question(seed: int | None = None, settings: RuleSettings | None = None) -> TrainingQuestion:
     settings = settings or default_rule_settings()
     hands = deal(seed)
@@ -305,6 +429,44 @@ def generate_opener_rebid_question(
     base_seed = seed if seed is not None else 1
     attempts = directed_sequence_attempt_budget(opener_bid=opener_bid, response_bid=response_bid)
     prioritize_sequence = opener_bid is not None and response_bid is not None
+
+    # Fast path: construct hand pair directly from shape/HCP constraints for known sequences
+    if prioritize_sequence:
+        _constraints = get_sequence_constraints(opener_bid, response_bid, None, settings)
+        if _constraints is not None:
+            _opener_c, _responder_c = _constraints
+            _targeted = deal_targeted(_opener_c, _responder_c, base_seed)
+            if _targeted is not None:
+                _opener_hand, _responder_hand = _targeted
+                _vuln = choose_vulnerability(base_seed)
+                _opener_eval = evaluate_hand(_opener_hand)
+                _open_rec = recommend_opening(_opener_eval, settings, _vuln)
+                if _open_rec.bid == opener_bid:
+                    _resp_eval = evaluate_hand(_responder_hand)
+                    _resp_rec = recommend_response(_open_rec.bid, _resp_eval, settings, _vuln)
+                    if _resp_rec.bid == response_bid:
+                        _rebid_rec = recommend_opener_rebid(
+                            _open_rec.bid, _resp_rec.bid, _opener_eval, settings, _vuln
+                        )
+                        return TrainingQuestion(
+                            hand=_opener_hand,
+                            evaluation=_opener_eval,
+                            recommendation=_rebid_rec,
+                            vulnerability=_vuln,
+                            choices=REBID_BIDS,
+                            legal_choices=legal_rebid_bids(_resp_rec.bid),
+                            acceptable_bids=build_acceptable_bids(
+                                _rebid_rec.bid,
+                                legal_rebid_bids(_resp_rec.bid),
+                                mode="opener_rebid",
+                                opener_bid=_open_rec.bid,
+                                response_bid=_resp_rec.bid,
+                            ),
+                            mode="开叫者再叫训练",
+                            auction=f"{_open_rec.bid}-{_resp_rec.bid}-? ",
+                            opener_bid=_open_rec.bid,
+                            response_bid=_resp_rec.bid,
+                        )
 
     for offset in range(attempts):
         hands = deal(base_seed + offset)
@@ -399,6 +561,53 @@ def generate_responder_rebid_question(
         opener_rebid_bid=opener_rebid_bid,
     )
     prioritize_sequence = opener_bid is not None and response_bid is not None and opener_rebid_bid is not None
+
+    # Fast path: construct hand pair directly from shape/HCP constraints for known sequences
+    if prioritize_sequence:
+        _constraints = get_sequence_constraints(opener_bid, response_bid, opener_rebid_bid, settings)
+        if _constraints is not None:
+            _opener_c, _responder_c = _constraints
+            _targeted = deal_targeted(_opener_c, _responder_c, base_seed)
+            if _targeted is not None:
+                _opener_hand, _responder_hand = _targeted
+                _vuln = choose_vulnerability(base_seed)
+                _opener_eval = evaluate_hand(_opener_hand)
+                _resp_eval = evaluate_hand(_responder_hand)
+                _open_rec = recommend_opening(_opener_eval, settings, _vuln)
+                if _open_rec.bid == opener_bid:
+                    _resp_rec = recommend_response(_open_rec.bid, _resp_eval, settings, _vuln)
+                    if _resp_rec.bid == response_bid:
+                        _rebid_rec = recommend_opener_rebid(
+                            _open_rec.bid, _resp_rec.bid, _opener_eval, settings, _vuln
+                        )
+                        if _rebid_rec.bid == opener_rebid_bid:
+                            _final_rec = recommend_responder_rebid(
+                                _open_rec.bid, _resp_rec.bid, _rebid_rec.bid,
+                                _resp_eval, settings, _vuln,
+                            )
+                            return TrainingQuestion(
+                                hand=_responder_hand,
+                                evaluation=_resp_eval,
+                                recommendation=_final_rec,
+                                vulnerability=_vuln,
+                                choices=RESPONDER_REBID_BIDS,
+                                legal_choices=legal_responder_rebid_bids(_rebid_rec.bid),
+                                acceptable_bids=build_acceptable_bids(
+                                    _final_rec.bid,
+                                    legal_responder_rebid_bids(_rebid_rec.bid),
+                                    mode="responder_rebid",
+                                    opener_bid=_open_rec.bid,
+                                    response_bid=_resp_rec.bid,
+                                    opener_rebid_bid=_rebid_rec.bid,
+                                ),
+                                mode="应叫者第二次应叫训练",
+                                auction=(
+                                    f"{_open_rec.bid}-Pass-{_resp_rec.bid}-Pass-{_rebid_rec.bid}-Pass-? "
+                                ),
+                                opener_bid=_open_rec.bid,
+                                response_bid=_resp_rec.bid,
+                                opener_rebid_bid=_rebid_rec.bid,
+                            )
 
     for offset in range(attempts):
         hands = deal(base_seed + offset)

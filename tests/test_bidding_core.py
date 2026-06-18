@@ -434,6 +434,18 @@ class RebidRecommendationTests(unittest.TestCase):
         hand = evaluation(14, 4, 3, 3, 3)
         self.assertEqual(recommend_opener_rebid("1♦", "X", hand, vulnerability=VULNERABILITY).bid, "Pass")
 
+    def test_opener_rebid_after_three_level_preempt_defaults_pass(self) -> None:
+        hand = evaluation(9, 3, 7, 2, 1, balanced=False)
+        self.assertEqual(recommend_opener_rebid("3♥", "3NT", hand, vulnerability=VULNERABILITY).bid, "Pass")
+
+    def test_opener_rebid_after_weak_two_non_ogust_defaults_pass(self) -> None:
+        hand = evaluation(9, 3, 6, 2, 2, balanced=False)
+        self.assertEqual(recommend_opener_rebid("2♥", "3♥", hand, vulnerability=VULNERABILITY).bid, "Pass")
+
+    def test_opener_rebid_after_weak_two_game_raise_defaults_pass(self) -> None:
+        hand = evaluation(8, 6, 2, 3, 2, balanced=False)
+        self.assertEqual(recommend_opener_rebid("2♠", "4♠", hand, vulnerability=VULNERABILITY).bid, "Pass")
+
     def test_opener_rebid_supports_responder_major(self) -> None:
         hand = evaluation(14, 4, 3, 3, 3)
         self.assertEqual(recommend_opener_rebid("1♦", "1♠", hand, vulnerability=VULNERABILITY).bid, "2♠")
@@ -537,6 +549,30 @@ class RebidRecommendationTests(unittest.TestCase):
     def test_responder_rebid_defaults_to_pass_without_clear_action(self) -> None:
         hand = evaluation(8, 3, 5, 3, 2, balanced=False)
         self.assertEqual(recommend_responder_rebid("1♦", "1♥", "2♣", hand, vulnerability=VULNERABILITY).bid, "Pass")
+
+    def test_responder_rebid_after_three_level_preempt_defaults_pass(self) -> None:
+        hand = evaluation(12, 4, 3, 3, 3)
+        self.assertEqual(recommend_responder_rebid("3♥", "4♥", "5♥", hand, vulnerability=VULNERABILITY).bid, "Pass")
+
+    def test_responder_rebid_after_weak_two_minimum_answer_invites_with_fit(self) -> None:
+        hand = evaluation(13, 4, 3, 3, 3)
+        self.assertEqual(recommend_responder_rebid("2♥", "2NT", "3♦", hand, vulnerability=VULNERABILITY).bid, "3♥")
+
+    def test_responder_rebid_after_weak_two_minimum_answer_games_with_strong_fit(self) -> None:
+        hand = evaluation(15, 4, 3, 3, 3)
+        self.assertEqual(recommend_responder_rebid("2♥", "2NT", "3♦", hand, vulnerability=VULNERABILITY).bid, "4♥")
+
+    def test_responder_rebid_after_ogust_maximum_can_bid_game(self) -> None:
+        hand = evaluation(13, 4, 3, 3, 3)
+        self.assertEqual(recommend_responder_rebid("2♠", "2NT", "3♠", hand, vulnerability=VULNERABILITY).bid, "4♠")
+
+    def test_responder_rebid_after_ogust_maximum_balanced_values_can_bid_three_nt(self) -> None:
+        hand = evaluation(11, 3, 2, 4, 4)
+        self.assertEqual(recommend_responder_rebid("2♥", "2NT", "3♠", hand, vulnerability=VULNERABILITY).bid, "3NT")
+
+    def test_responder_rebid_after_ogust_three_nt_stops(self) -> None:
+        hand = evaluation(14, 3, 3, 4, 3)
+        self.assertEqual(recommend_responder_rebid("2♥", "2NT", "3NT", hand, vulnerability=VULNERABILITY).bid, "Pass")
 
     def test_responder_rebid_invalid_contract_sequence_defaults_to_pass(self) -> None:
         hand = evaluation(8, 3, 3, 4, 3)

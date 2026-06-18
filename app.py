@@ -520,6 +520,9 @@ def contextual_response_meaning(bid: str, auction_bids: list[str]) -> str | None
         return None
 
     seq = f"{auction_bids[0]}-{bid}"
+    if opening[0] == 2 and opening[1] in {"♦", "♥", "♠"} and bid == "2NT":
+        return f"在 {seq} 中，2NT 是 Ogust 2NT 问叫，通常用于询问弱二开叫者的牌力高低与开叫套质量。"
+
     if opening[1] == "NT":
         if bid == "2♣":
             return f"在 {seq} 中，2♣ 是 Stayman，通常询问开叫方是否有四张高花。"
@@ -667,7 +670,7 @@ def auction_bid_meaning(bid: str, position: int, auction_bids: list[str]) -> str
         "2♦": "2/1 应叫 - 11+ HCP，4张方片",
         "2♥": "2/1 应叫 - 11+ HCP，4张红心",
         "2♠": "2/1 应叫 - 11+ HCP，4张黑桃",
-        "2NT": "2NT 应叫 - 11+ HCP，均型",
+        "2NT": "2NT 应叫 - 11+ HCP，均型（弱二开叫后常作 Ogust 2NT 问叫）",
         "3♣": "支持邀局 - 11-12 HCP，4张梅花支持",
         "3♦": "支持邀局 - 11-12 HCP，4张方片支持",
         "3♥": "支持邀局 - 11-12 HCP，4张红心支持",

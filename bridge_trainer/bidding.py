@@ -442,8 +442,25 @@ def recommend_opener_rebid(
     opener_suit = symbol_to_suit(opening_contract[1])
     response_suit = symbol_to_suit(response_contract[1])
     response_level = response_contract[0]
+    opening_level, opening_strain = opening_contract
+    is_weak_two_opening = opening_level == 2 and opening_strain in {"♦", "♥", "♠"}
+    is_three_plus_preempt_opening = opening_level >= 3 and opening_strain in {"♣", "♦", "♥", "♠"}
     game_adjustment = game_threshold_adjustment(vulnerability, settings)
     raise_hcp = hcp - game_adjustment
+
+    if is_three_plus_preempt_opening:
+        return BidRecommendation(
+            "Pass",
+            f"同伴已在阻击序列中推进到 {response_bid}，开叫者在当前简化体系中以止叫为主，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+            "阻击后止叫",
+        )
+
+    if is_weak_two_opening and response_bid != "2NT":
+        return BidRecommendation(
+            "Pass",
+            f"弱二开叫后，除 Ogust 2NT 问叫外当前简化体系默认不开新一轮描述，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+            "弱二后止叫",
+        )
 
     if opening_bid == "1NT":
         if response_bid == "2♣" and settings.stayman_enabled:
@@ -511,6 +528,13 @@ def recommend_opener_rebid(
                     f"Ogust 2NT 问叫后，你有 {hcp} HCP（高限）且开叫套顶张质量较好（顶三张中 2 张），按标准回答 3♠。牌型：{length_text}。",
                     "Ogust 回答：高限+好套",
                 )
+
+    if is_weak_two_opening and response_bid == "2NT":
+        return BidRecommendation(
+            "Pass",
+            f"弱二开叫面对 2NT 问叫时，当前条件下未触发标准 Ogust 回答，简化体系建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+            "弱二后止叫",
+        )
 
     if opening_bid == "2NT":
         if response_bid == "3♣" and settings.stayman_enabled:
@@ -657,6 +681,77 @@ def recommend_responder_rebid(
 
     opener_strain = opener_rebid_contract[1]
     opener_suit = symbol_to_suit(opener_strain)
+    opening_contract = parse_contract_bid(opening_bid)
+    if opening_contract is not None:
+        opening_level, opening_strain = opening_contract
+        is_weak_two_opening = opening_level == 2 and opening_strain in {"♦", "♥", "♠"}
+        is_three_plus_preempt_opening = opening_level >= 3 and opening_strain in {"♣", "♦", "♥", "♠"}
+        if is_three_plus_preempt_opening:
+            return BidRecommendation(
+                "Pass",
+                f"阻击开叫序列中同伴已再叫 {opener_rebid_bid}，当前简化体系以止叫为主，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+                "阻击后止叫",
+            )
+        if is_weak_two_opening and response_bid == "2NT" and settings.august_2nt_enabled:
+            opening_suit = symbol_to_suit(opening_strain)
+            ogust_minimum_answers = {"3♣", "3♦"}
+            ogust_maximum_answers = {"3♥", "3♠", "3NT"}
+            if opener_rebid_bid == "3NT":
+                return BidRecommendation(
+                    "Pass",
+                    f"弱二开叫经 Ogust 2NT 问叫后，开叫者已用 3NT 显示高限强套并落在成局，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+                    "Ogust 后止叫",
+                )
+
+            if opener_rebid_bid in ogust_minimum_answers | ogust_maximum_answers:
+                if opening_suit is not None:
+                    has_major_support = opening_suit in {"H", "S"} and lengths[opening_suit] >= 3
+                    is_maximum_answer = opener_rebid_bid in ogust_maximum_answers
+
+                    # Ogust 分档（常见简化）：
+                    # 低限回答（3♣/3♦）：有配合约 12-14 邀局，15+ 进局；无配合均型约 13+ 尝试 3NT。
+                    # 高限回答（3♥/3♠/3NT）：有配合约 10-11 邀局，12+ 进局；无配合均型约 11+ 尝试 3NT。
+                    major_game_hcp = 12 if is_maximum_answer else 15
+                    major_invite_low = 10 if is_maximum_answer else 12
+                    major_invite_high = major_game_hcp - 1
+                    nt_game_hcp = 11 if is_maximum_answer else 13
+
+                    if has_major_support:
+                        major_game_bid = f"4{suit_symbol(opening_suit)}"
+                        major_invite_bid = f"3{suit_symbol(opening_suit)}"
+                        if hcp >= major_game_hcp and is_legal_response_bid(opener_rebid_bid, major_game_bid):
+                            return BidRecommendation(
+                                major_game_bid,
+                                f"弱二开叫经 Ogust 2NT 后，开叫者再叫 {opener_rebid_bid}（{'高限' if is_maximum_answer else '低限'}）；你有 {hcp} HCP 且有 3+ 张将牌支持，按分档直接进局 {major_game_bid}。牌型：{length_text}。",
+                                "Ogust 后高花进局",
+                            )
+                        if major_invite_low <= hcp <= major_invite_high and is_legal_response_bid(opener_rebid_bid, major_invite_bid):
+                            return BidRecommendation(
+                                major_invite_bid,
+                                f"弱二开叫经 Ogust 2NT 后，开叫者再叫 {opener_rebid_bid}（{'高限' if is_maximum_answer else '低限'}）；你有 {hcp} HCP 且有 3+ 张将牌支持，按分档先邀局 {major_invite_bid}。牌型：{length_text}。",
+                                "Ogust 后高花邀局",
+                            )
+
+                    if evaluation.balanced and hcp >= nt_game_hcp and is_legal_response_bid(opener_rebid_bid, "3NT"):
+                        return BidRecommendation(
+                            "3NT",
+                            f"弱二开叫经 Ogust 2NT 后，开叫者再叫 {opener_rebid_bid}（{'高限' if is_maximum_answer else '低限'}）；你有 {hcp} HCP 且均型，按分档转入 3NT。牌型：{length_text}。",
+                            "Ogust 后无将进局",
+                        )
+
+                return BidRecommendation(
+                    "Pass",
+                    f"弱二开叫经 Ogust 2NT 问叫后，开叫者再叫 {opener_rebid_bid}；当前牌力与配合不足继续推进，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+                    "Ogust 后止叫",
+                )
+
+        if is_weak_two_opening:
+            return BidRecommendation(
+                "Pass",
+                f"弱二开叫序列中同伴已再叫 {opener_rebid_bid}，当前简化体系默认止叫，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+                "弱二后止叫",
+            )
+
     game_adjustment = game_threshold_adjustment(vulnerability, settings)
     nt_game_hcp = max(11, 13 + game_adjustment)
     nt_invite_low = max(7, 10 + game_adjustment)

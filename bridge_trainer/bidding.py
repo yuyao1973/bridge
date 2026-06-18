@@ -141,7 +141,7 @@ class RuleSettings:
     august_2nt_enabled: bool = True
     responder_simple_raise_max: int = 9
     responder_limit_raise_min: int = 10
-    responder_limit_raise_max: int = 12
+    responder_limit_raise_max: int = 11
     bergen_raises_enabled: bool = True
     responder_bergen_weak_max: int = 9
     splinter_enabled: bool = True
@@ -999,7 +999,7 @@ def recommend_response_to_major(
                 "Splinter游牌加叫",
             )
     
-    if settings.jacoby_2nt_enabled and has_four_card_support and hcp >= game_hcp:
+    if settings.jacoby_2nt_enabled and has_four_card_support and hcp >= 12:
         return BidRecommendation(
             "2NT",
             f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张以上支持。简化 2/1 体系用 2NT Jacoby 表示进局逼叫支持。牌型：{length_text}。",
@@ -1019,7 +1019,7 @@ def recommend_response_to_major(
         medium_bergen_bid = "3♦"
         return BidRecommendation(
             medium_bergen_bid,
-            f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。按 CCBA Bergen Raises，{medium_bergen_bid} 表示 4 张支持且点数中等（10-12 HCP）。牌型：{length_text}。",
+            f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。按 CCBA Bergen Raises，{medium_bergen_bid} 表示 4 张支持且点数中等（10-11 HCP）。牌型：{length_text}。",
             "Bergen 中等支持 (4张)",
         )
 

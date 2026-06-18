@@ -276,6 +276,30 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertIn('"choices"', data)
         self.assertIn('"acceptable_bids"', data)
 
+    def test_create_question_opener_rebid_mode(self) -> None:
+        req = self._DummyRequest({"mode": "opener_rebid", "seed": 100, "opener_bid": "1NT", "settings": {}})
+        response = asyncio.run(create_question(req))
+        self.assertEqual(response.status_code, 200)
+        data = response.body.decode("utf-8")
+        self.assertIn('"mode":"开叫者再叫训练"', data)
+        self.assertIn('"seed":100', data)
+
+    def test_create_question_responder_rebid_mode(self) -> None:
+        req = self._DummyRequest({"mode": "responder_rebid", "seed": 100, "opener_bid": "1NT", "settings": {}})
+        response = asyncio.run(create_question(req))
+        self.assertEqual(response.status_code, 200)
+        data = response.body.decode("utf-8")
+        self.assertIn('"mode":"应叫者第二次应叫训练"', data)
+        self.assertIn('"seed":100', data)
+
+    def test_create_question_unknown_mode_falls_back_to_opening(self) -> None:
+        req = self._DummyRequest({"mode": "unknown", "seed": 100, "settings": {}})
+        response = asyncio.run(create_question(req))
+        self.assertEqual(response.status_code, 200)
+        data = response.body.decode("utf-8")
+        self.assertIn('"mode":"开叫训练"', data)
+        self.assertIn('"seed":100', data)
+
     def test_check_answer_primary_grade(self) -> None:
         req = self._DummyRequest(
             {

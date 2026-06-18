@@ -5,7 +5,7 @@ import re
 
 import streamlit as st
 
-from bridge_trainer.bidding import RuleSettings
+from bridge_trainer.bidding import RuleSettings, legal_rebid_bids, legal_response_bids
 from bridge_trainer.cards import format_hand_lines
 from bridge_trainer.training import (
     TrainingQuestion,
@@ -22,17 +22,38 @@ st.markdown(
     <style>
     .disabled-bid {
         width: 100%;
-        min-height: 2.5rem;
-        padding: 0.45rem 0.6rem;
+        min-height: 2.1rem;
+        padding: 0.28rem 0.45rem;
         border: 1px solid #d0d5dd;
         border-radius: 0.5rem;
         background: #f2f4f7;
         color: #98a2b3;
         text-align: center;
         font-weight: 600;
+        font-size: 0.88rem;
         cursor: not-allowed;
         opacity: 0.55;
         user-select: none;
+    }
+    [class*="st-key-bid_"] button {
+        min-height: 2.1rem;
+        padding: 0.28rem 0.45rem;
+        font-size: 0.88rem;
+        font-weight: 600;
+        line-height: 1.15;
+        border-width: 1px !important;
+        border-radius: 0.5rem !important;
+        transition: box-shadow 0.12s ease, transform 0.12s ease, filter 0.12s ease;
+    }
+    [class*="st-key-bid_"] button:hover:not(:disabled) {
+        filter: brightness(0.97);
+        box-shadow: 0 0 0 2px rgba(16, 24, 40, 0.18);
+        transform: translateY(-1px);
+    }
+    [class*="st-key-bid_"] button[kind="primary"] {
+        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.95), 0 0 0 5px rgba(245, 158, 11, 0.25);
+        font-weight: 700;
+        transform: translateY(-1px);
     }
     .disabled-bid::before {
         content: "✕ ";
@@ -121,6 +142,32 @@ def payload_opener_bid(selected_bid: str) -> str | None:
     return selected_bid
 
 
+def response_bid_options_for_opener(selected_bid: str) -> list[str]:
+    opener_bid = payload_opener_bid(selected_bid)
+    if opener_bid is None:
+        return ["随机"]
+    return ["随机", *legal_response_bids(opener_bid)]
+
+
+def payload_response_bid(selected_bid: str) -> str | None:
+    if selected_bid == "随机":
+        return None
+    return selected_bid
+
+
+def opener_rebid_bid_options_for_response(selected_bid: str) -> list[str]:
+    response_bid = payload_response_bid(selected_bid)
+    if response_bid is None:
+        return ["随机"]
+    return ["随机", *legal_rebid_bids(response_bid)]
+
+
+def payload_opener_rebid_bid(selected_bid: str) -> str | None:
+    if selected_bid == "随机":
+        return None
+    return selected_bid
+
+
 def selected_opener_bid(bid_key: str, category_key: str) -> tuple[str, str]:
     category = st.session_state.get(category_key, "一阶定约")
     options = opener_bid_options(category)
@@ -147,10 +194,16 @@ def init_state() -> None:
         st.session_state.opener_rebid_opener_bid = "随机"
     if "opener_rebid_opener_category" not in st.session_state:
         st.session_state.opener_rebid_opener_category = "一阶定约"
+    if "opener_rebid_response_bid" not in st.session_state:
+        st.session_state.opener_rebid_response_bid = "随机"
     if "responder_rebid_opener_bid" not in st.session_state:
         st.session_state.responder_rebid_opener_bid = "随机"
     if "responder_rebid_opener_category" not in st.session_state:
         st.session_state.responder_rebid_opener_category = "一阶定约"
+    if "responder_rebid_response_bid" not in st.session_state:
+        st.session_state.responder_rebid_response_bid = "随机"
+    if "responder_rebid_opener_rebid_bid" not in st.session_state:
+        st.session_state.responder_rebid_opener_rebid_bid = "随机"
     if "setting_opening_min_hcp" not in st.session_state:
         st.session_state.setting_opening_min_hcp = 12
     if "setting_one_nt_range" not in st.session_state:
@@ -273,10 +326,26 @@ def new_question(mode: str) -> TrainingQuestion:
         return generate_response_question(seed, payload_opener_bid(opener_bid), settings, opener_category)
     if mode == "开叫者再叫训练":
         opener_bid, opener_category = selected_opener_bid("opener_rebid_opener_bid", "opener_rebid_opener_category")
-        return generate_opener_rebid_question(seed, settings, payload_opener_bid(opener_bid), opener_category)
+        response_bid = payload_response_bid(st.session_state.get("opener_rebid_response_bid", "随机"))
+        return generate_opener_rebid_question(
+            seed,
+            settings,
+            payload_opener_bid(opener_bid),
+            opener_category,
+            response_bid=response_bid,
+        )
     if mode == "应叫者第二次应叫训练":
         opener_bid, opener_category = selected_opener_bid("responder_rebid_opener_bid", "responder_rebid_opener_category")
-        return generate_responder_rebid_question(seed, settings, payload_opener_bid(opener_bid), opener_category)
+        response_bid = payload_response_bid(st.session_state.get("responder_rebid_response_bid", "随机"))
+        opener_rebid_bid = payload_opener_rebid_bid(st.session_state.get("responder_rebid_opener_rebid_bid", "随机"))
+        return generate_responder_rebid_question(
+            seed,
+            settings,
+            payload_opener_bid(opener_bid),
+            opener_category,
+            response_bid=response_bid,
+            opener_rebid_bid=opener_rebid_bid,
+        )
     return generate_opening_question(seed, settings)
 
 
@@ -318,6 +387,9 @@ def change_response_opener_category() -> None:
 
 def change_opener_rebid_opener() -> None:
     st.session_state.opener_rebid_opener_bid = st.session_state.opener_rebid_opener_choice
+    response_options = response_bid_options_for_opener(st.session_state.opener_rebid_opener_bid)
+    if st.session_state.opener_rebid_response_bid not in response_options:
+        st.session_state.opener_rebid_response_bid = response_options[0]
     if st.session_state.mode == "开叫者再叫训练":
         st.session_state.question = new_question(st.session_state.mode)
         st.session_state.submitted = False
@@ -328,6 +400,16 @@ def change_opener_rebid_opener() -> None:
 def change_opener_rebid_opener_category() -> None:
     st.session_state.opener_rebid_opener_category = st.session_state.opener_rebid_opener_category_choice
     st.session_state.opener_rebid_opener_bid = opener_bid_options(st.session_state.opener_rebid_opener_category)[0]
+    st.session_state.opener_rebid_response_bid = response_bid_options_for_opener(st.session_state.opener_rebid_opener_bid)[0]
+    if st.session_state.mode == "开叫者再叫训练":
+        st.session_state.question = new_question(st.session_state.mode)
+        st.session_state.submitted = False
+        st.session_state.selected_bid = "Pass"
+        reset_auction_meaning()
+
+
+def change_opener_rebid_response() -> None:
+    st.session_state.opener_rebid_response_bid = st.session_state.opener_rebid_response_choice
     if st.session_state.mode == "开叫者再叫训练":
         st.session_state.question = new_question(st.session_state.mode)
         st.session_state.submitted = False
@@ -337,6 +419,12 @@ def change_opener_rebid_opener_category() -> None:
 
 def change_responder_rebid_opener() -> None:
     st.session_state.responder_rebid_opener_bid = st.session_state.responder_rebid_opener_choice
+    response_options = response_bid_options_for_opener(st.session_state.responder_rebid_opener_bid)
+    if st.session_state.responder_rebid_response_bid not in response_options:
+        st.session_state.responder_rebid_response_bid = response_options[0]
+    opener_rebid_options = opener_rebid_bid_options_for_response(st.session_state.responder_rebid_response_bid)
+    if st.session_state.responder_rebid_opener_rebid_bid not in opener_rebid_options:
+        st.session_state.responder_rebid_opener_rebid_bid = opener_rebid_options[0]
     if st.session_state.mode == "应叫者第二次应叫训练":
         st.session_state.question = new_question(st.session_state.mode)
         st.session_state.submitted = False
@@ -347,6 +435,31 @@ def change_responder_rebid_opener() -> None:
 def change_responder_rebid_opener_category() -> None:
     st.session_state.responder_rebid_opener_category = st.session_state.responder_rebid_opener_category_choice
     st.session_state.responder_rebid_opener_bid = opener_bid_options(st.session_state.responder_rebid_opener_category)[0]
+    st.session_state.responder_rebid_response_bid = response_bid_options_for_opener(st.session_state.responder_rebid_opener_bid)[0]
+    st.session_state.responder_rebid_opener_rebid_bid = opener_rebid_bid_options_for_response(
+        st.session_state.responder_rebid_response_bid
+    )[0]
+    if st.session_state.mode == "应叫者第二次应叫训练":
+        st.session_state.question = new_question(st.session_state.mode)
+        st.session_state.submitted = False
+        st.session_state.selected_bid = "Pass"
+        reset_auction_meaning()
+
+
+def change_responder_rebid_response() -> None:
+    st.session_state.responder_rebid_response_bid = st.session_state.responder_rebid_response_choice
+    opener_rebid_options = opener_rebid_bid_options_for_response(st.session_state.responder_rebid_response_bid)
+    if st.session_state.responder_rebid_opener_rebid_bid not in opener_rebid_options:
+        st.session_state.responder_rebid_opener_rebid_bid = opener_rebid_options[0]
+    if st.session_state.mode == "应叫者第二次应叫训练":
+        st.session_state.question = new_question(st.session_state.mode)
+        st.session_state.submitted = False
+        st.session_state.selected_bid = "Pass"
+        reset_auction_meaning()
+
+
+def change_responder_rebid_opener_rebid() -> None:
+    st.session_state.responder_rebid_opener_rebid_bid = st.session_state.responder_rebid_opener_rebid_choice
     if st.session_state.mode == "应叫者第二次应叫训练":
         st.session_state.question = new_question(st.session_state.mode)
         st.session_state.submitted = False
@@ -539,13 +652,39 @@ def contextual_response_meaning(bid: str, auction_bids: list[str]) -> str | None
             return f"在 {seq} 中，3NT 通常是直接无将进局。"
         return f"在 {seq} 中，这是 1NT 体系下的应叫，用于处理高花配合与定约层级。"
 
+    # Splinter（短套扣叫）识别：一阶高花开叫后跳叫新花，通常表示对开叫高花的 4+ 张支持与该新花单缺/缺门。
+    if opening[0] == 1 and opening[1] == "♥" and bid == "3♠":
+        return f"在 {seq} 中，3♠ 通常是 Splinter（短套扣叫）：显示对 ♥ 的 4+ 张支持，并表示 ♠ 单缺/缺门，常见为进局导向牌力。"
+    if opening[0] == 1 and opening[1] == "♠" and bid in {"4♣", "4♦", "4♥"}:
+        return f"在 {seq} 中，{bid} 通常是 Splinter（短套扣叫）：显示对 ♠ 的 4+ 张支持，并表示所叫花色单缺/缺门，常见为进局导向牌力。"
+
     # Bergen加叫识别：高花开叫后的3C/3D是约定性Bergen加叫
     if opening[1] in {"♥", "♠"}:
+        if bid == "2NT":
+            return (
+                f"在 {seq} 中，2NT 通常是 Jacoby 2NT 强将问叫："
+                f"显示对 {opening[1]} 的 4 张以上支持，并通常具有进局实力。"
+            )
         if bid == "3♣":
             return f"在 {seq} 中，3♣ 是 Bergen 弱支持，通常表示 4 张{opening[1]}支持且点数较弱（6-9 HCP）。"
         if bid == "3♦":
             return f"在 {seq} 中，3♦ 是 Bergen 中等支持，通常表示 4 张{opening[1]}支持且点数中等（10-11 HCP）。"
         if response[1] == opening[1]:
+            if opening[0] == 1 and response[0] == 2:
+                return (
+                    f"在 {seq} 中，2{opening[1]} 是简单加叫：通常约 6-9 HCP，"
+                    f"并至少 3 张（更常见 4 张）{opening[1]}支持。"
+                )
+            if opening[0] == 1 and response[0] == 3:
+                return (
+                    f"在 {seq} 中，3{opening[1]} 通常是限制性加叫：约 10-11 HCP，"
+                    f"并有至少 4 张{opening[1]}支持。"
+                )
+            if opening[0] == 1 and response[0] >= 4:
+                return (
+                    f"在 {seq} 中，直接进局加叫通常表示较强配合与进局意图，"
+                    f"一般有 4 张以上{opening[1]}支持。"
+                )
             return f"在 {seq} 中，应叫同花通常表示支持同伴高花并按牌力分层。"
         if bid == "1NT":
             return f"在 {seq} 中，1NT 通常是高花开叫后的半逼叫/逼叫一轮应叫。"
@@ -815,6 +954,7 @@ def render_stats() -> None:
     if st.session_state.mode == "开叫者再叫训练":
         opener_rebid_category = st.session_state.opener_rebid_opener_category
         opener_rebid_options = opener_bid_options(opener_rebid_category)
+        opener_rebid_response_options = response_bid_options_for_opener(st.session_state.opener_rebid_opener_bid)
         st.sidebar.selectbox(
             "开叫叫品",
             OPENER_CATEGORY_OPTIONS,
@@ -833,9 +973,24 @@ def render_stats() -> None:
             on_change=change_opener_rebid_opener,
             help="用于按开叫叫品分别练习开叫者再叫。",
         )
+        st.sidebar.selectbox(
+            "同伴应叫叫品",
+            opener_rebid_response_options,
+            key="opener_rebid_response_choice",
+            index=opener_rebid_response_options.index(st.session_state.opener_rebid_response_bid)
+            if st.session_state.opener_rebid_response_bid in opener_rebid_response_options
+            else 0,
+            on_change=change_opener_rebid_response,
+            disabled=payload_opener_bid(st.session_state.opener_rebid_opener_bid) is None,
+            help="指定前两拍序列，例如选择 1♥ 和 2NT 来生成 1♥-2NT-? 的牌例。",
+        )
     if st.session_state.mode == "应叫者第二次应叫训练":
         responder_rebid_category = st.session_state.responder_rebid_opener_category
         responder_rebid_options = opener_bid_options(responder_rebid_category)
+        responder_rebid_response_options = response_bid_options_for_opener(st.session_state.responder_rebid_opener_bid)
+        responder_rebid_opener_rebid_options = opener_rebid_bid_options_for_response(
+            st.session_state.responder_rebid_response_bid
+        )
         st.sidebar.selectbox(
             "开叫叫品",
             OPENER_CATEGORY_OPTIONS,
@@ -854,6 +1009,29 @@ def render_stats() -> None:
             on_change=change_responder_rebid_opener,
             help="用于按开叫叫品分别练习应叫者第二次应叫。",
         )
+        st.sidebar.selectbox(
+            "应叫叫品",
+            responder_rebid_response_options,
+            key="responder_rebid_response_choice",
+            index=responder_rebid_response_options.index(st.session_state.responder_rebid_response_bid)
+            if st.session_state.responder_rebid_response_bid in responder_rebid_response_options
+            else 0,
+            on_change=change_responder_rebid_response,
+            disabled=payload_opener_bid(st.session_state.responder_rebid_opener_bid) is None,
+            help="指定第二拍应叫。",
+        )
+        st.sidebar.selectbox(
+            "开叫者再叫",
+            responder_rebid_opener_rebid_options,
+            key="responder_rebid_opener_rebid_choice",
+            index=responder_rebid_opener_rebid_options.index(st.session_state.responder_rebid_opener_rebid_bid)
+            if st.session_state.responder_rebid_opener_rebid_bid in responder_rebid_opener_rebid_options
+            else 0,
+            on_change=change_responder_rebid_opener_rebid,
+            disabled=payload_response_bid(st.session_state.responder_rebid_response_bid) is None,
+            help="指定前三拍序列，例如 1♥-2NT-4♥ 后练习第四拍。",
+        )
+    st.sidebar.divider()
     with st.sidebar.expander("叫牌规则设置"):
         st.selectbox(
             "1NT 开叫范围",
@@ -987,7 +1165,6 @@ def main() -> None:
     st.title("♠ 桥牌 2/1 Game Force 叫牌训练")
     st.write("选择开叫、应叫、开叫者再叫或应叫者第二次应叫训练，根据手牌和叫牌过程选择最合适的叫品。")
     st.caption(f"实战参数：{practical_profile_text(current_rule_settings())}")
-
     question: TrainingQuestion = st.session_state.question
 
     with st.container(border=True):

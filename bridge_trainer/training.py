@@ -27,6 +27,10 @@ ONE_LEVEL_OPENINGS = {"1♣", "1♦", "1♥", "1♠", "1NT"}
 STRONG_OPENINGS = {"2♣", "2NT"}
 PREEMPT_OPENINGS = {"2♦", "2♥", "2♠", "3♣", "3♦", "3♥", "3♠", "4♣", "4♦", "4♥", "4♠", "5♣", "5♦"}
 SUPPORTED_FILTER_OPENINGS = ONE_LEVEL_OPENINGS | STRONG_OPENINGS | PREEMPT_OPENINGS
+DEFAULT_SEARCH_ATTEMPTS = 2_000
+OPENING_FILTER_SEARCH_ATTEMPTS = 5_000
+RESPONSE_FILTER_SEARCH_ATTEMPTS = 15_000
+REBID_FILTER_SEARCH_ATTEMPTS = 40_000
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,21 @@ class TrainingQuestion:
     opener_bid: str | None = None
     response_bid: str | None = None
     opener_rebid_bid: str | None = None
+
+
+def search_attempt_budget(
+    opener_bid: str | None = None,
+    response_bid: str | None = None,
+    opener_rebid_bid: str | None = None,
+) -> int:
+    attempts = DEFAULT_SEARCH_ATTEMPTS
+    if opener_bid is not None:
+        attempts = max(attempts, OPENING_FILTER_SEARCH_ATTEMPTS)
+    if response_bid is not None:
+        attempts = max(attempts, RESPONSE_FILTER_SEARCH_ATTEMPTS)
+    if opener_rebid_bid is not None:
+        attempts = max(attempts, REBID_FILTER_SEARCH_ATTEMPTS)
+    return attempts
 
 
 def generate_opening_question(seed: int | None = None, settings: RuleSettings | None = None) -> TrainingQuestion:
@@ -80,8 +99,9 @@ def generate_response_question(
     if opener_bid is not None and opener_bid not in supported_openings:
         opener_bid = None
     base_seed = seed if seed is not None else 1
+    attempts = search_attempt_budget(opener_bid=opener_bid)
 
-    for offset in range(2_000):
+    for offset in range(attempts):
         hands = deal(base_seed + offset)
         vulnerability = choose_vulnerability(base_seed + offset)
         opener_evaluation = evaluate_hand(hands["N"])
@@ -120,14 +140,18 @@ def generate_opener_rebid_question(
     settings: RuleSettings | None = None,
     opener_bid: str | None = None,
     opener_category: str | None = None,
+    response_bid: str | None = None,
 ) -> TrainingQuestion:
     settings = settings or default_rule_settings()
     supported_openings = supported_openings_for_category(opener_category)
     if opener_bid is not None and opener_bid not in supported_openings:
         opener_bid = None
+    if opener_bid is not None and response_bid is not None and response_bid not in legal_response_bids(opener_bid):
+        response_bid = None
     base_seed = seed if seed is not None else 1
+    attempts = search_attempt_budget(opener_bid=opener_bid, response_bid=response_bid)
 
-    for offset in range(2_000):
+    for offset in range(attempts):
         hands = deal(base_seed + offset)
         vulnerability = choose_vulnerability(base_seed + offset)
         opener_hand = hands["S"]
@@ -146,6 +170,8 @@ def generate_opener_rebid_question(
             vulnerability,
         )
         if response_recommendation.bid == "Pass" and opening_recommendation.bid not in PREEMPT_OPENINGS:
+            continue
+        if response_bid is not None and response_recommendation.bid != response_bid:
             continue
 
         recommendation = recommend_opener_rebid(
@@ -175,6 +201,15 @@ def generate_opener_rebid_question(
             response_bid=response_recommendation.bid,
         )
 
+    if response_bid is not None:
+        return generate_opener_rebid_question(
+            seed,
+            settings,
+            opener_bid,
+            opener_category,
+            response_bid=None,
+        )
+
     return generate_response_question(seed, opener_bid, settings, opener_category)
 
 
@@ -183,14 +218,25 @@ def generate_responder_rebid_question(
     settings: RuleSettings | None = None,
     opener_bid: str | None = None,
     opener_category: str | None = None,
+    response_bid: str | None = None,
+    opener_rebid_bid: str | None = None,
 ) -> TrainingQuestion:
     settings = settings or default_rule_settings()
     supported_openings = supported_openings_for_category(opener_category)
     if opener_bid is not None and opener_bid not in supported_openings:
         opener_bid = None
+    if opener_bid is not None and response_bid is not None and response_bid not in legal_response_bids(opener_bid):
+        response_bid = None
+    if response_bid is not None and opener_rebid_bid is not None and opener_rebid_bid not in legal_rebid_bids(response_bid):
+        opener_rebid_bid = None
     base_seed = seed if seed is not None else 1
+    attempts = search_attempt_budget(
+        opener_bid=opener_bid,
+        response_bid=response_bid,
+        opener_rebid_bid=opener_rebid_bid,
+    )
 
-    for offset in range(2_000):
+    for offset in range(attempts):
         hands = deal(base_seed + offset)
         vulnerability = choose_vulnerability(base_seed + offset)
         opener_hand = hands["N"]
@@ -212,6 +258,8 @@ def generate_responder_rebid_question(
         )
         if response_recommendation.bid == "Pass":
             continue
+        if response_bid is not None and response_recommendation.bid != response_bid:
+            continue
 
         opener_rebid_recommendation = recommend_opener_rebid(
             opening_recommendation.bid,
@@ -221,6 +269,8 @@ def generate_responder_rebid_question(
             vulnerability,
         )
         if opener_rebid_recommendation.bid == "Pass":
+            continue
+        if opener_rebid_bid is not None and opener_rebid_recommendation.bid != opener_rebid_bid:
             continue
 
         recommendation = recommend_responder_rebid(
@@ -253,6 +303,26 @@ def generate_responder_rebid_question(
             opener_bid=opening_recommendation.bid,
             response_bid=response_recommendation.bid,
             opener_rebid_bid=opener_rebid_recommendation.bid,
+        )
+
+    if opener_rebid_bid is not None:
+        return generate_responder_rebid_question(
+            seed,
+            settings,
+            opener_bid,
+            opener_category,
+            response_bid=response_bid,
+            opener_rebid_bid=None,
+        )
+
+    if response_bid is not None:
+        return generate_responder_rebid_question(
+            seed,
+            settings,
+            opener_bid,
+            opener_category,
+            response_bid=None,
+            opener_rebid_bid=None,
         )
 
     return generate_response_question(seed, None, settings, opener_category)
@@ -335,6 +405,15 @@ def build_acceptable_bids(
     elif mode == "opener_rebid":
         if rec_level == 1 and rec_strain in {"♣", "♦", "♥", "♠"}:
             add_if_legal("1NT")
+
+        if (
+            rec_level == 4
+            and opener_contract is not None
+            and response_bid == "2NT"
+            and opener_contract[0] == 1
+            and rec_strain == opener_contract[1]
+        ):
+            add_if_legal("3NT")
 
         if (
             rec_level == 2

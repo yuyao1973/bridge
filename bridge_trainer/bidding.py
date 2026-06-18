@@ -561,6 +561,16 @@ def recommend_opener_rebid(
         if response_bid == "3♥" and settings.transfers_enabled and is_legal_response_bid(response_bid, "3♠"):
             return BidRecommendation("3♠", f"2NT-3♥ 序列中，3♥ 为黑桃转移，开叫者应接受转移叫 3♠。牌型：{length_text}。", "2NT 后接受黑桃转移")
 
+    # Jacoby 2NT：一阶高花开叫后，2NT 显示 4+ 将牌支持与进局实力。
+    if opening_bid in {"1♥", "1♠"} and response_bid == "2NT":
+        game_bid = f"4{opening_strain}"
+        if is_legal_response_bid(response_bid, game_bid):
+            return BidRecommendation(
+                game_bid,
+                f"同伴以 Jacoby 2NT 显示对 {opening_strain} 的 4+ 张支持与进局实力；你有 {hcp} HCP，优先确立高花进局 {game_bid}。牌型：{length_text}。",
+                "Jacoby 2NT 后高花进局",
+            )
+
     # Bergen 加叫：1♥/1♠ 开叫后，3♣/3♦ 视作对开叫高花的支持。
     # 常见简化分档：
     # - 3♣（弱支持，约 6-9）：开叫方 12-15 以 3M 再叫，16+ 进局 4M。
@@ -586,6 +596,38 @@ def recommend_opener_rebid(
             f"同伴 1NT 应叫后，你有 {hcp} HCP 且均型，属于最低限，通常止叫 Pass。牌型：{length_text}。",
             "1NT 应叫后最低限止叫",
         )
+
+    # 一阶高花开叫后同伴简单加叫到 2M：
+    # 最低限（约 12-14）通常止叫；中等（15-17）再邀叫；高限（18+）进局。
+    if (
+        opening_level == 1
+        and opening_strain in {"♥", "♠"}
+        and response_contract is not None
+        and response_contract[0] == 2
+        and response_contract[1] == opening_strain
+    ):
+        if hcp <= 14:
+            return BidRecommendation(
+                "Pass",
+                f"同伴简单加叫到 {response_bid}，你有 {hcp} HCP 属于最低限，优先止叫 Pass。牌型：{length_text}。",
+                "简单加叫后最低限止叫",
+            )
+        if hcp >= 18:
+            game_bid = f"4{opening_strain}"
+            if is_legal_response_bid(response_bid, game_bid):
+                return BidRecommendation(
+                    game_bid,
+                    f"同伴简单加叫到 {response_bid}，你有 {hcp} HCP 属于高限，直接进局 {game_bid}。牌型：{length_text}。",
+                    "简单加叫后高限进局",
+                )
+
+        invite_bid = f"3{opening_strain}"
+        if is_legal_response_bid(response_bid, invite_bid):
+            return BidRecommendation(
+                invite_bid,
+                f"同伴简单加叫到 {response_bid}，你有 {hcp} HCP 属于中等强度，叫 {invite_bid} 表示继续邀请。牌型：{length_text}。",
+                "简单加叫后邀请",
+            )
 
     if response_suit in {"H", "S"} and lengths[response_suit] >= 4:
         level = choose_raise_level(response_level, raise_hcp)

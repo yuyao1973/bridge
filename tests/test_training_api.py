@@ -9,7 +9,10 @@ from bridge_trainer.bidding import BidRecommendation, RuleSettings
 from bridge_trainer.cards import Card
 from bridge_trainer.evaluator import HandEvaluation
 from bridge_trainer.training import (
+    DEFAULT_SEARCH_ATTEMPTS,
     PREEMPT_OPENINGS,
+    RESPONSE_FILTER_SEARCH_ATTEMPTS,
+    REBID_FILTER_SEARCH_ATTEMPTS,
     STRONG_OPENINGS,
     TrainingQuestion,
     build_acceptable_bids,
@@ -127,6 +130,17 @@ class AcceptableBidTests(unittest.TestCase):
         self.assertIn("2♣", bids)
         self.assertIn("2♥", bids)
 
+    def test_opener_rebid_jacoby_two_nt_major_game_accepts_three_nt(self) -> None:
+        bids = build_acceptable_bids(
+            "4♥",
+            ["Pass", "3NT", "4♥", "4NT"],
+            mode="opener_rebid",
+            opener_bid="1♥",
+            response_bid="2NT",
+        )
+        self.assertIn("4♥", bids)
+        self.assertIn("3NT", bids)
+
     def test_opener_rebid_one_nt_after_one_level_sequence_accepts_two_clubs(self) -> None:
         bids = build_acceptable_bids(
             "1NT",
@@ -241,6 +255,17 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.mode, "开叫者再叫训练")
         self.assertTrue(question.auction.startswith("1NT-"))
 
+    def test_opener_rebid_question_respects_requested_opening_response_sequence(self) -> None:
+        question = generate_opener_rebid_question(
+            seed=100,
+            settings=RuleSettings(),
+            opener_bid="1♥",
+            response_bid="2NT",
+        )
+        self.assertEqual(question.opener_bid, "1♥")
+        self.assertEqual(question.response_bid, "2NT")
+        self.assertTrue(question.auction.startswith("1♥-2NT-"))
+
     def test_generate_opener_rebid_question_skips_pass_response_for_non_preempt(self) -> None:
         sentinel = generate_opening_question(seed=100, settings=RuleSettings())
         with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("1♣", "x", "x")):
@@ -248,6 +273,44 @@ class TrainingGenerationTests(unittest.TestCase):
                 with patch("bridge_trainer.training.generate_response_question", return_value=sentinel):
                     question = generate_opener_rebid_question(seed=100, settings=RuleSettings())
         self.assertIs(question, sentinel)
+
+    def test_generate_opener_rebid_question_relaxes_unmatched_response_filter_without_downgrading_mode(self) -> None:
+        with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("1♥", "x", "x")):
+            with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("2NT", "x", "x")):
+                with patch("bridge_trainer.training.recommend_opener_rebid", return_value=BidRecommendation("4♥", "x", "x")):
+                    question = generate_opener_rebid_question(
+                        seed=100,
+                        settings=RuleSettings(),
+                        opener_bid="1♥",
+                        response_bid="1♠",
+                    )
+        self.assertEqual(question.mode, "开叫者再叫训练")
+        self.assertEqual(question.opener_bid, "1♥")
+        self.assertEqual(question.response_bid, "2NT")
+
+    def test_generate_opener_rebid_question_searches_beyond_default_budget_for_filtered_sequence(self) -> None:
+        target_offset = DEFAULT_SEARCH_ATTEMPTS + 25
+        opening_calls = {"count": 0}
+
+        def opening_side_effect(*_args, **_kwargs):
+            current = opening_calls["count"]
+            opening_calls["count"] += 1
+            return BidRecommendation("1♥" if current == target_offset else "1♣", "x", "x")
+
+        with patch("bridge_trainer.training.recommend_opening", side_effect=opening_side_effect):
+            with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("2NT", "x", "x")):
+                with patch("bridge_trainer.training.recommend_opener_rebid", return_value=BidRecommendation("4♥", "x", "x")):
+                    question = generate_opener_rebid_question(
+                        seed=100,
+                        settings=RuleSettings(),
+                        opener_bid="1♥",
+                        response_bid="2NT",
+                    )
+        self.assertEqual(question.mode, "开叫者再叫训练")
+        self.assertEqual(question.opener_bid, "1♥")
+        self.assertEqual(question.response_bid, "2NT")
+        self.assertGreater(opening_calls["count"], DEFAULT_SEARCH_ATTEMPTS)
+        self.assertLessEqual(opening_calls["count"], RESPONSE_FILTER_SEARCH_ATTEMPTS)
 
     def test_opener_rebid_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
         question = generate_opener_rebid_question(seed=100, settings=RuleSettings(), opener_bid="7NT")
@@ -259,6 +322,19 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.mode, "应叫者第二次应叫训练")
         self.assertTrue(question.auction.startswith("1NT-Pass-"))
 
+    def test_responder_rebid_question_respects_requested_three_bid_sequence(self) -> None:
+        baseline = generate_responder_rebid_question(seed=100, settings=RuleSettings(), opener_bid="1NT")
+        question = generate_responder_rebid_question(
+            seed=100,
+            settings=RuleSettings(),
+            opener_bid=baseline.opener_bid,
+            response_bid=baseline.response_bid,
+            opener_rebid_bid=baseline.opener_rebid_bid,
+        )
+        self.assertEqual(question.opener_bid, baseline.opener_bid)
+        self.assertEqual(question.response_bid, baseline.response_bid)
+        self.assertEqual(question.opener_rebid_bid, baseline.opener_rebid_bid)
+
     def test_generate_responder_rebid_question_skips_when_opener_rebid_is_pass(self) -> None:
         sentinel = generate_opening_question(seed=100, settings=RuleSettings())
         with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("1♣", "x", "x")):
@@ -267,6 +343,47 @@ class TrainingGenerationTests(unittest.TestCase):
                     with patch("bridge_trainer.training.generate_response_question", return_value=sentinel):
                         question = generate_responder_rebid_question(seed=100, settings=RuleSettings())
         self.assertIs(question, sentinel)
+
+    def test_generate_responder_rebid_question_relaxes_unmatched_response_filter_without_downgrading_mode(self) -> None:
+        with patch("bridge_trainer.training.recommend_opening", return_value=BidRecommendation("1NT", "x", "x")):
+            with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("2♣", "x", "x")):
+                with patch("bridge_trainer.training.recommend_opener_rebid", return_value=BidRecommendation("2♦", "x", "x")):
+                    question = generate_responder_rebid_question(
+                        seed=100,
+                        settings=RuleSettings(),
+                        opener_bid="1NT",
+                        response_bid="2♦",
+                    )
+        self.assertEqual(question.mode, "应叫者第二次应叫训练")
+        self.assertEqual(question.opener_bid, "1NT")
+        self.assertEqual(question.response_bid, "2♣")
+
+    def test_generate_responder_rebid_question_searches_beyond_default_budget_for_three_bid_sequence(self) -> None:
+        target_offset = DEFAULT_SEARCH_ATTEMPTS + 40
+        opening_calls = {"count": 0}
+
+        def opening_side_effect(*_args, **_kwargs):
+            current = opening_calls["count"]
+            opening_calls["count"] += 1
+            return BidRecommendation("1NT" if current == target_offset else "1♣", "x", "x")
+
+        with patch("bridge_trainer.training.recommend_opening", side_effect=opening_side_effect):
+            with patch("bridge_trainer.training.recommend_response", return_value=BidRecommendation("2♣", "x", "x")):
+                with patch("bridge_trainer.training.recommend_opener_rebid", return_value=BidRecommendation("2♦", "x", "x")):
+                    with patch("bridge_trainer.training.recommend_responder_rebid", return_value=BidRecommendation("3NT", "x", "x")):
+                        question = generate_responder_rebid_question(
+                            seed=100,
+                            settings=RuleSettings(),
+                            opener_bid="1NT",
+                            response_bid="2♣",
+                            opener_rebid_bid="2♦",
+                        )
+        self.assertEqual(question.mode, "应叫者第二次应叫训练")
+        self.assertEqual(question.opener_bid, "1NT")
+        self.assertEqual(question.response_bid, "2♣")
+        self.assertEqual(question.opener_rebid_bid, "2♦")
+        self.assertGreater(opening_calls["count"], DEFAULT_SEARCH_ATTEMPTS)
+        self.assertLessEqual(opening_calls["count"], REBID_FILTER_SEARCH_ATTEMPTS)
 
     def test_responder_rebid_question_invalid_requested_opener_falls_back_to_supported(self) -> None:
         question = generate_responder_rebid_question(seed=100, settings=RuleSettings(), opener_bid="7NT")
@@ -413,6 +530,24 @@ class ApiEndpointTests(unittest.TestCase):
         data = response.body.decode("utf-8")
         self.assertIn('"mode":"应叫者第二次应叫训练"', data)
         self.assertIn('"seed":100', data)
+
+    def test_create_question_responder_rebid_mode_with_sequence_filters(self) -> None:
+        req = self._DummyRequest(
+            {
+                "mode": "responder_rebid",
+                "seed": 100,
+                "opener_bid": "1NT",
+                "response_bid": "2♣",
+                "opener_rebid_bid": "2♦",
+                "settings": {},
+            }
+        )
+        response = asyncio.run(create_question(req))
+        self.assertEqual(response.status_code, 200)
+        data = response.body.decode("utf-8")
+        self.assertIn('"mode":"应叫者第二次应叫训练"', data)
+        self.assertIn('"response_bid":"2♣"', data)
+        self.assertIn('"opener_rebid_bid":"2♦"', data)
 
     def test_create_question_unknown_mode_falls_back_to_opening(self) -> None:
         req = self._DummyRequest({"mode": "unknown", "seed": 100, "settings": {}})

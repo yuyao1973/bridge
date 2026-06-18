@@ -451,6 +451,12 @@ class RebidRecommendationTests(unittest.TestCase):
         hand = evaluation(14, 4, 3, 3, 3)
         self.assertEqual(recommend_opener_rebid("1♦", "1♠", hand, vulnerability=VULNERABILITY).bid, "2♠")
 
+    def test_opener_rebid_after_simple_major_raise_with_minimum_stops(self) -> None:
+        hand = evaluation(12, 2, 5, 3, 3, balanced=False)
+        result = recommend_opener_rebid("1♥", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "简单加叫后最低限止叫")
+
     def test_opener_rebid_balanced_minimum_one_nt(self) -> None:
         hand = evaluation(13, 3, 3, 4, 3)
         self.assertEqual(recommend_opener_rebid("1♦", "1♥", hand, vulnerability=VULNERABILITY).bid, "1NT")
@@ -531,6 +537,12 @@ class RebidRecommendationTests(unittest.TestCase):
         result = recommend_opener_rebid("1♥", "3♣", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "3♥")
         self.assertEqual(result.rule_name, "Bergen 后支持开叫高花")
+
+    def test_opener_rebid_after_jacoby_two_nt_prefers_major_game(self) -> None:
+        hand = evaluation(12, 2, 5, 3, 3, balanced=False)
+        result = recommend_opener_rebid("1♥", "2NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "Jacoby 2NT 后高花进局")
 
     def test_two_nt_stayman_rebid_answers_hearts(self) -> None:
         hand = evaluation(20, 3, 4, 3, 3)

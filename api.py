@@ -67,6 +67,8 @@ async def create_question(request: Request) -> JSONResponse:
     payload = await request.json()
     mode = payload.get("mode", "opening")
     opener_bid = payload.get("opener_bid")
+    response_bid = payload.get("response_bid")
+    opener_rebid_bid = payload.get("opener_rebid_bid")
     opener_category = payload.get("opener_category")
     seed = payload.get("seed") or random.randint(1, 1_000_000_000)
     settings = settings_from_payload(payload.get("settings") or {})
@@ -74,9 +76,22 @@ async def create_question(request: Request) -> JSONResponse:
     if mode == "response":
         question = generate_response_question(seed, opener_bid, settings, opener_category)
     elif mode == "opener_rebid":
-        question = generate_opener_rebid_question(seed, settings, opener_bid, opener_category)
+        question = generate_opener_rebid_question(
+            seed,
+            settings,
+            opener_bid,
+            opener_category,
+            response_bid=response_bid,
+        )
     elif mode == "responder_rebid":
-        question = generate_responder_rebid_question(seed, settings, opener_bid, opener_category)
+        question = generate_responder_rebid_question(
+            seed,
+            settings,
+            opener_bid,
+            opener_category,
+            response_bid=response_bid,
+            opener_rebid_bid=opener_rebid_bid,
+        )
     else:
         question = generate_opening_question(seed, settings)
     return JSONResponse(question_to_payload(question, seed))

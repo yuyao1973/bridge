@@ -629,6 +629,27 @@ def recommend_opener_rebid(
                 "简单加叫后邀请",
             )
 
+    # 一阶低花开叫后，同伴跳加叫到 3m 通常表示限制加叫（约 10-12）。
+    # 开叫方均型且有成局实力时优先 3NT，否则以止叫为主，避免误走“再叫第二套”。
+    if (
+        opening_level == 1
+        and opening_strain in {"♣", "♦"}
+        and response_contract is not None
+        and response_contract[0] == 3
+        and response_contract[1] == opening_strain
+    ):
+        if evaluation.balanced and hcp >= 13 and is_legal_response_bid(response_bid, "3NT"):
+            return BidRecommendation(
+                "3NT",
+                f"同伴跳加叫 {response_bid} 显示低花限制加叫；你有 {hcp} HCP 且均型，优先选择 3NT 成局。牌型：{length_text}。",
+                "低花限制加叫后 3NT",
+            )
+        return BidRecommendation(
+            "Pass",
+            f"同伴跳加叫 {response_bid} 显示低花限制加叫；你有 {hcp} HCP，当前未到明确 3NT 成局条件，建议止叫 Pass。牌型：{length_text}。",
+            "低花限制加叫后止叫",
+        )
+
     if response_suit in {"H", "S"} and lengths[response_suit] >= 4:
         level = choose_raise_level(response_level, raise_hcp)
         bid = f"{level}{suit_symbol(response_suit)}"

@@ -560,6 +560,7 @@ class ApiHelperTests(unittest.TestCase):
                 "scoring_mode": "MP",
                 "respect_vulnerability": False,
                 "game_aggressiveness": 9,
+                "inverted_minors_enabled": True,
             }
         )
         self.assertEqual(settings.opening_min_hcp, 11)
@@ -568,6 +569,7 @@ class ApiHelperTests(unittest.TestCase):
         self.assertEqual(settings.scoring_mode, "MP")
         self.assertFalse(settings.respect_vulnerability)
         self.assertEqual(settings.game_aggressiveness, 1)
+        self.assertTrue(settings.inverted_minors_enabled)
 
     def test_question_to_payload_contains_frontend_contract_fields(self) -> None:
         hand = [

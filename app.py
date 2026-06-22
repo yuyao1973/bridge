@@ -242,6 +242,8 @@ def init_state() -> None:
         st.session_state.setting_negative_double_enabled = True
     if "setting_negative_double_min_hcp" not in st.session_state:
         st.session_state.setting_negative_double_min_hcp = 6
+    if "setting_inverted_minors_enabled" not in st.session_state:
+        st.session_state.setting_inverted_minors_enabled = False
     if "setting_forcing_nt_label" not in st.session_state:
         st.session_state.setting_forcing_nt_label = "半逼叫"
     if "setting_scoring_mode" not in st.session_state:
@@ -308,6 +310,7 @@ def current_rule_settings() -> RuleSettings:
         "responder_splinter_max_hcp": st.session_state.get("setting_responder_splinter_max_hcp", 15),
         "negative_double_enabled": st.session_state.get("setting_negative_double_enabled", True),
         "negative_double_min_hcp": st.session_state.get("setting_negative_double_min_hcp", 6),
+        "inverted_minors_enabled": st.session_state.get("setting_inverted_minors_enabled", False),
         "forcing_nt_label": st.session_state.get("setting_forcing_nt_label", "半逼叫"),
         "scoring_mode": st.session_state.get("setting_scoring_mode", "IMP"),
         "respect_vulnerability": st.session_state.get("setting_respect_vulnerability", True),
@@ -495,6 +498,7 @@ def reset_rules() -> None:
     st.session_state.setting_responder_splinter_max_hcp = 15
     st.session_state.setting_negative_double_enabled = True
     st.session_state.setting_negative_double_min_hcp = 6
+    st.session_state.setting_inverted_minors_enabled = False
     st.session_state.setting_forcing_nt_label = "半逼叫"
     st.session_state.setting_scoring_mode = "IMP"
     st.session_state.setting_respect_vulnerability = True
@@ -1107,6 +1111,11 @@ def render_stats() -> None:
         st.checkbox(
             "竞叫后启用否定性加倍（Negative Double）",
             key="setting_negative_double_enabled",
+            on_change=change_rules,
+        )
+        st.checkbox(
+            "低花开叫后启用低花反加叫（Inverted Minors）",
+            key="setting_inverted_minors_enabled",
             on_change=change_rules,
         )
         st.selectbox(

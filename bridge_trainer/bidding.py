@@ -153,6 +153,7 @@ class RuleSettings:
     responder_splinter_max_hcp: int = 15
     negative_double_enabled: bool = True
     negative_double_min_hcp: int = 6
+    inverted_minors_enabled: bool = False
 
 
 def default_rule_settings() -> RuleSettings:
@@ -1274,64 +1275,132 @@ def recommend_response_to_major(
     major_bid = suit_symbol(major)
     game_adjustment = game_threshold_adjustment(vulnerability, settings)
     game_hcp = max(11, 13 + game_adjustment)
-    invite_low = max(8, 10 + game_adjustment)
-    invite_high = game_hcp - 1
-    simple_low = max(5, 6 + game_adjustment)
-    simple_high = invite_low - 1
     has_four_card_support = lengths[major] >= 4
+    support_count = lengths[major]
 
-    # 4张将牌支持优先：先处理4张支持约定，再退化到3张支持加叫。
-    # Splinter优先于Jacoby 2NT，因为牌型更特殊。
-    if settings.splinter_enabled and has_four_card_support:
-        splinter_suit = find_splinter_suit(major, lengths)
-        if splinter_suit is not None and settings.responder_splinter_min_hcp <= hcp <= settings.responder_splinter_max_hcp:
-            splinter_bid = get_splinter_bid(major, splinter_suit)
-            splinter_suit_name = SUIT_NAMES[splinter_suit]
+    if support_count <= 2:
+        if hcp < 5:
             return BidRecommendation(
-                splinter_bid,
-                f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。牌型特殊：{splinter_suit_name}花单张/void。使用Splinter叫 {splinter_bid} 表示游牌加叫。牌型：{length_text}。",
-                "Splinter游牌加叫",
+                "Pass",
+                f"同伴开 1{major_bid}，你只有 {hcp} HCP 且对开叫花色支持不足，通常 Pass。牌型：{length_text}。",
+                f"对 1{major_name} 不叫",
             )
-    
-    if settings.jacoby_2nt_enabled and has_four_card_support and hcp >= 12:
+        if major == "H" and lengths["S"] >= 4 and hcp >= 6:
+            return BidRecommendation(
+                "1♠",
+                f"同伴开 1♥，你有 {hcp} HCP 且 4 张以上黑桃，应在一阶叫出 1♠。牌型：{length_text}。",
+                "一盖一应叫",
+            )
+        if hcp >= settings.two_over_one_min_hcp:
+            suit = choose_two_over_one_suit(lengths, excluded=major)
+            if suit is not None:
+                return BidRecommendation(
+                    f"2{suit_symbol(suit)}",
+                    f"同伴开 1{major_bid}，你有 {hcp} HCP，达到当前 2/1 下限 {settings.two_over_one_min_hcp} HCP，二阶新花为进局逼叫，选择较长的 {SUIT_NAMES[suit]}。牌型：{length_text}。",
+                    "2/1 进局逼叫",
+                )
+        if settings.forcing_nt_min_hcp <= hcp <= settings.forcing_nt_max_hcp:
+            return BidRecommendation(
+                "1NT",
+                f"同伴开 1{major_bid}，你有 {hcp} HCP，落在当前 1NT 应叫范围 {settings.forcing_nt_min_hcp}-{settings.forcing_nt_max_hcp} HCP 内，当前设置中 1NT 为{settings.forcing_nt_label}。牌型：{length_text}。",
+                f"1NT {settings.forcing_nt_label}",
+            )
         return BidRecommendation(
-            "2NT",
-            f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张以上支持。简化 2/1 体系用 2NT Jacoby 表示进局逼叫支持。牌型：{length_text}。",
-            "Jacoby 2NT 支持",
-        )
-    
-    if settings.bergen_raises_enabled and has_four_card_support and hcp <= settings.responder_bergen_weak_max:
-        # 本项目训练约定：一阶高花开叫后，弱 Bergen 统一用 3♣ 表达 4 张支持弱牌型。
-        weak_bergen_bid = "3♣"
-        return BidRecommendation(
-            weak_bergen_bid,
-            f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。按 CCBA Bergen Raises，{weak_bergen_bid} 表示 4 张支持且点数较弱（6-9 HCP）。牌型：{length_text}。",
-            "Bergen 弱支持 (4张)",
+            "Pass",
+            f"同伴开 1{major_bid}，你有 {hcp} HCP，但既无足够支持也无合适一阶/二阶应叫，建议 Pass。牌型：{length_text}。",
+            f"对 1{major_name} 不叫",
         )
 
-    if settings.bergen_raises_enabled and has_four_card_support and settings.responder_simple_raise_max < hcp <= settings.responder_limit_raise_max:
-        medium_bergen_bid = "3♦"
-        return BidRecommendation(
-            medium_bergen_bid,
-            f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。按 CCBA Bergen Raises，{medium_bergen_bid} 表示 4 张支持且点数中等（10-11 HCP）。牌型：{length_text}。",
-            "Bergen 中等支持 (4张)",
-        )
+    if settings.bergen_raises_enabled:
+        # 5+ 张支持的弱牌优先关煞叫。
+        if support_count >= 5 and hcp <= 10 and is_legal_response_bid(f"1{major_bid}", f"4{major_bid}"):
+            return BidRecommendation(
+                f"4{major_bid}",
+                f"同伴开 1{major_bid}，你有 {hcp} HCP 且 5+ 张支持，按弱牌关煞思路直接跳到 4{major_bid}。牌型：{length_text}。",
+                "高花关煞加叫",
+            )
 
-    if lengths[major] >= 3 and hcp >= game_hcp:
+        # Splinter优先于Jacoby 2NT，因为牌型更特殊。
+        if settings.splinter_enabled and has_four_card_support:
+            splinter_suit = find_splinter_suit(major, lengths)
+            if splinter_suit is not None:
+                short_len = lengths[splinter_suit]
+                splinter_min_hcp = settings.responder_splinter_min_hcp if short_len == 1 else max(0, settings.responder_splinter_min_hcp - 2)
+                if splinter_min_hcp <= hcp <= settings.responder_splinter_max_hcp:
+                    splinter_bid = get_splinter_bid(major, splinter_suit)
+                    splinter_suit_name = SUIT_NAMES[splinter_suit]
+                    short_desc = "单张" if short_len == 1 else "缺门"
+                    return BidRecommendation(
+                        splinter_bid,
+                        f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持。牌型特殊：{splinter_suit_name}花{short_desc}。使用Splinter叫 {splinter_bid}。牌型：{length_text}。",
+                        "Splinter游牌加叫",
+                    )
+
+        no_shortage = min(lengths[suit] for suit in ["S", "H", "D", "C"] if suit != major) >= 2
+        if settings.jacoby_2nt_enabled and has_four_card_support and hcp >= 13 and no_shortage:
+            return BidRecommendation(
+                "2NT",
+                f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张以上支持，且无单缺，按 Jacoby 2NT 表示进局逼叫支持。牌型：{length_text}。",
+                "Jacoby 2NT 支持",
+            )
+
+        if has_four_card_support:
+            if hcp <= 6 and is_legal_response_bid(f"1{major_bid}", f"3{major_bid}"):
+                return BidRecommendation(
+                    f"3{major_bid}",
+                    f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持，按弱支持跳加叫到 3{major_bid}。牌型：{length_text}。",
+                    "Bergen 弱支持 (4张)",
+                )
+            if 7 <= hcp <= settings.responder_bergen_weak_max and not evaluation.balanced and is_legal_response_bid(f"1{major_bid}", "3♣"):
+                return BidRecommendation(
+                    "3♣",
+                    f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持，按 Bergen 约定用 3♣ 表示弱支持且偏分布牌。牌型：{length_text}。",
+                    "Bergen 弱支持 (4张)",
+                )
+            if 10 <= hcp <= 12 and no_shortage and is_legal_response_bid(f"1{major_bid}", "3♦"):
+                return BidRecommendation(
+                    "3♦",
+                    f"同伴开 1{major_bid}，你有 {hcp} HCP 和 4 张支持且无单缺，按 Bergen 约定用 3♦ 表示中等支持。牌型：{length_text}。",
+                    "Bergen 中等支持 (4张)",
+                )
+
+        if 6 <= hcp <= 9 and is_legal_response_bid(f"1{major_bid}", f"2{major_bid}"):
+            return BidRecommendation(
+                f"2{major_bid}",
+                f"同伴开 1{major_bid}，你有 {hcp} HCP 和 {support_count} 张支持，简单加叫到 2{major_bid}。牌型：{length_text}。",
+                "高花简单加叫",
+            )
+        if 10 <= hcp <= 12 and support_count == 3 and is_legal_response_bid(f"1{major_bid}", "1NT"):
+            return BidRecommendation(
+                "1NT",
+                f"同伴开 1{major_bid}，你有 {hcp} HCP 且仅 3 张支持，按 Bergen 体系常用处理先叫 1NT 过渡。牌型：{length_text}。",
+                f"1NT {settings.forcing_nt_label}",
+            )
+        if hcp >= 13:
+            suit = choose_two_over_one_suit(lengths, excluded=major)
+            if suit is not None:
+                return BidRecommendation(
+                    f"2{suit_symbol(suit)}",
+                    f"同伴开 1{major_bid}，你有 {hcp} HCP，按高限进程优先新花进局逼叫。牌型：{length_text}。",
+                    "2/1 进局逼叫",
+                )
+
+    if support_count >= 3 and hcp >= game_hcp:
         return BidRecommendation(
             f"4{major_bid}",
             f"同伴开 1{major_bid}，你有 {hcp} HCP 和 3 张支持，合力够局，直接加叫到 4{major_bid}。牌型：{length_text}。",
             "高花进局加叫",
         )
 
-    if lengths[major] >= 3 and settings.responder_limit_raise_min <= hcp <= settings.responder_limit_raise_max:
+    if support_count >= 3 and settings.responder_limit_raise_min <= hcp <= settings.responder_limit_raise_max:
         return BidRecommendation(
             f"3{major_bid}",
             f"同伴开 1{major_bid}，你有 {hcp} HCP 和 3 张支持，属于邀局加叫，叫 3{major_bid}。牌型：{length_text}。",
             "高花邀局加叫",
         )
 
-    if lengths[major] >= 3 and simple_low <= hcp <= settings.responder_simple_raise_max:
+    simple_low = max(5, 6 + game_adjustment)
+    if support_count >= 3 and simple_low <= hcp <= settings.responder_simple_raise_max:
         return BidRecommendation(
             f"2{major_bid}",
             f"同伴开 1{major_bid}，你有 {hcp} HCP 和 3 张支持，简单加叫到 2{major_bid}。牌型：{length_text}。",
@@ -1398,6 +1467,36 @@ def recommend_response_to_minor(
             "低花后叫高花",
         )
 
+    minor_honors = evaluation.top_honors_by_suit.get(minor, 0)
+    has_minor_support = lengths[minor] >= 5 or (lengths[minor] == 4 and minor_honors >= 2)
+
+    if not evaluation.balanced and has_minor_support:
+        if settings.inverted_minors_enabled:
+            if hcp <= 9:
+                return BidRecommendation(
+                    f"3{minor_bid}",
+                    f"同伴开 1{minor_bid}，你有 {hcp} HCP 且低花支持明确，按低花反加叫使用 3{minor_bid} 表示弱牌加叫。牌型：{length_text}。",
+                    "低花反加叫（弱）",
+                )
+            return BidRecommendation(
+                f"2{minor_bid}",
+                f"同伴开 1{minor_bid}，你有 {hcp} HCP 且低花支持明确，按低花反加叫使用 2{minor_bid} 表示逼叫一轮。牌型：{length_text}。",
+                "低花反加叫（逼叫）",
+            )
+
+        if 6 <= hcp <= 9:
+            return BidRecommendation(
+                f"2{minor_bid}",
+                f"同伴开 1{minor_bid}，你有 {hcp} HCP 和低花支持，作简单加叫 2{minor_bid}。牌型：{length_text}。",
+                "低花简单加叫",
+            )
+        if 10 <= hcp <= 12:
+            return BidRecommendation(
+                f"3{minor_bid}",
+                f"同伴开 1{minor_bid}，你有 {hcp} HCP 和低花支持，作限制性加叫 3{minor_bid}。牌型：{length_text}。",
+                "低花限制加叫",
+            )
+
     if evaluation.balanced and hcp >= nt_game_hcp:
         return BidRecommendation(
             "3NT",
@@ -1415,13 +1514,6 @@ def recommend_response_to_minor(
             "1NT",
             f"同伴开 1{minor_bid}，你有 {hcp} HCP，均型且无 4 张高花，叫 1NT。牌型：{length_text}。",
             "低花后 1NT",
-        )
-
-    if lengths[minor] >= 5 and hcp >= 10:
-        return BidRecommendation(
-            f"3{minor_bid}",
-            f"同伴开 1{minor_bid}，你有 {hcp} HCP 和 5 张以上低花支持，作限制性加叫。牌型：{length_text}。",
-            "低花限制加叫",
         )
 
     return BidRecommendation(

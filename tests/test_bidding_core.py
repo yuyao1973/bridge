@@ -700,6 +700,71 @@ class RebidRecommendationTests(unittest.TestCase):
         hand = evaluation(8, 3, 3, 4, 3)
         self.assertEqual(recommend_responder_rebid("1♦", "1♥", "X", hand, vulnerability=VULNERABILITY).bid, "Pass")
 
+    # --- 低花反加叫后再叫 ---
+
+    def test_inverted_minor_rebid_low_limit_with_stop_bids_other_minor_club(self) -> None:
+        # 1♣-2♣，12 HCP，低限，黑桃有止 -> 顺叫 2♦
+        settings = RuleSettings(inverted_minors_enabled=True)
+        hand = evaluation(12, 2, 3, 3, 5, balanced=False, top_honors_by_suit={"S": 1, "H": 0, "D": 0, "C": 2})
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♦")
+        self.assertEqual(result.rule_name, "低花反加叫后顺叫低花")
+
+    def test_inverted_minor_rebid_low_limit_with_stop_bids_other_minor_diamond(self) -> None:
+        # 1♦-2♦，14 HCP，低限，红心有止 -> 顺叫 3♣
+        settings = RuleSettings(inverted_minors_enabled=True)
+        hand = evaluation(14, 3, 1, 5, 4, balanced=False, top_honors_by_suit={"S": 0, "H": 1, "D": 2, "C": 1})
+        result = recommend_opener_rebid("1♦", "2♦", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♣")
+        self.assertEqual(result.rule_name, "低花反加叫后顺叫低花")
+
+    def test_inverted_minor_rebid_low_limit_no_stop_rebids_minor(self) -> None:
+        # 1♣-2♣，12 HCP，低限，高花无止 -> 重叫 3♣
+        settings = RuleSettings(inverted_minors_enabled=True)
+        hand = evaluation(12, 3, 3, 2, 5, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 1, "C": 2})
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♣")
+        self.assertEqual(result.rule_name, "低花反加叫后低限重叫低花")
+
+    def test_inverted_minor_rebid_medium_both_stops_bids_two_nt(self) -> None:
+        # 1♦-2♦，15 HCP，两高花有止，无单缺 -> 2NT
+        settings = RuleSettings(inverted_minors_enabled=True)
+        hand = evaluation(15, 3, 3, 5, 2, balanced=False, top_honors_by_suit={"S": 1, "H": 1, "D": 2, "C": 1})
+        result = recommend_opener_rebid("1♦", "2♦", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2NT")
+        self.assertEqual(result.rule_name, "低花反加叫后 2NT")
+
+    def test_inverted_minor_rebid_medium_short_major_bids_two_major(self) -> None:
+        # 1♣-2♣，16 HCP，红心单张 -> 2♥ 报单缺
+        settings = RuleSettings(inverted_minors_enabled=True)
+        hand = evaluation(16, 3, 1, 4, 5, balanced=False, top_honors_by_suit={"S": 1, "H": 0, "D": 1, "C": 2})
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♥")
+        self.assertEqual(result.rule_name, "低花反加叫后报单缺")
+
+    def test_inverted_minor_rebid_high_limit_short_major_splinter(self) -> None:
+        # 1♦-2♦，19 HCP，黑桃单张 -> 3♠ Splinter
+        settings = RuleSettings(inverted_minors_enabled=True)
+        hand = evaluation(19, 1, 3, 5, 4, balanced=False, top_honors_by_suit={"S": 0, "H": 1, "D": 3, "C": 1})
+        result = recommend_opener_rebid("1♦", "2♦", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♠")
+        self.assertEqual(result.rule_name, "低花反加叫后高限 Splinter")
+
+    def test_inverted_minor_rebid_balanced_eighteen_hcp_three_nt(self) -> None:
+        # 1♣-2♣，18 HCP 均型，两高花有止 -> 3NT
+        settings = RuleSettings(inverted_minors_enabled=True)
+        hand = evaluation(18, 3, 3, 3, 4, balanced=True, top_honors_by_suit={"S": 1, "H": 1, "D": 1, "C": 2})
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3NT")
+        self.assertEqual(result.rule_name, "低花反加叫后 3NT")
+
+    def test_inverted_minor_rebid_not_triggered_when_disabled(self) -> None:
+        # 反加叫关闭时，1♣-2♣ 应当走简单加叫后的普通再叫逻辑，不触发反加叫分支
+        settings = RuleSettings(inverted_minors_enabled=False)
+        hand = evaluation(15, 3, 3, 2, 5, balanced=False, top_honors_by_suit={"S": 1, "H": 1, "D": 1, "C": 2})
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertNotEqual(result.rule_name, "低花反加叫后 2NT")
+
 
 class UtilityRuleTests(unittest.TestCase):
     def test_parse_contract_bid(self) -> None:

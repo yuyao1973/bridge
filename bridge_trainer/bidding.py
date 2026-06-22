@@ -630,6 +630,85 @@ def recommend_opener_rebid(
                 "简单加叫后邀请",
             )
 
+    # 低花反加叫后再叫：1♣-2♣ 或 1♦-2♦（启用时，应叫方 10+ HCP 逼叫一轮）
+    # 再叫优先级：3NT(18-19均型) > 3M Splinter(18-21短高花) > 2M报单缺(15-17)
+    #             > 2NT(15-17两高花有止) > 顺叫另一低花(12-14有止) > 重叫低花(12-14无止)
+    if (
+        settings.inverted_minors_enabled
+        and opening_level == 1
+        and opening_strain in {"♣", "♦"}
+        and response_contract is not None
+        and response_contract[0] == 2
+        and response_contract[1] == opening_strain
+    ):
+        other_minor = "D" if opener_suit == "C" else "C"
+        other_minor_sym = suit_symbol(other_minor)
+        spade_stop = lengths["S"] >= 1 and evaluation.top_honors_by_suit.get("S", 0) >= 1
+        heart_stop = lengths["H"] >= 1 and evaluation.top_honors_by_suit.get("H", 0) >= 1
+        both_majors_stopped = spade_stop and heart_stop
+        short_major: str | None = next(
+            (mj for mj in ["H", "S"] if lengths[mj] <= 1), None
+        )
+
+        # 3NT：18-19 均型，两高花均有止
+        if evaluation.balanced and 18 <= hcp <= 19 and both_majors_stopped and is_legal_response_bid(response_bid, "3NT"):
+            return BidRecommendation(
+                "3NT",
+                f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP 均型且两高花均有止，直接叫 3NT。牌型：{length_text}。",
+                "低花反加叫后 3NT",
+            )
+
+        # 3♥/3♠ Splinter（18-21 HCP）：报高花单缺/缺门，强满贯试探
+        if short_major is not None and 18 <= hcp <= 21:
+            splinter_bid = f"3{suit_symbol(short_major)}"
+            if is_legal_response_bid(response_bid, splinter_bid):
+                short_desc = "单张" if lengths[short_major] == 1 else "缺门"
+                return BidRecommendation(
+                    splinter_bid,
+                    f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP 且 {SUIT_NAMES[short_major]}{short_desc}，叫 {splinter_bid} 作强满贯试探型 Splinter。牌型：{length_text}。",
+                    "低花反加叫后高限 Splinter",
+                )
+
+        # 2♥/2♠（15-17 HCP）：报高花单缺/缺门，满贯试探
+        if short_major is not None and 15 <= hcp <= 17:
+            short_bid = f"2{suit_symbol(short_major)}"
+            if is_legal_response_bid(response_bid, short_bid):
+                short_desc = "单张" if lengths[short_major] == 1 else "缺门"
+                return BidRecommendation(
+                    short_bid,
+                    f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP 且 {SUIT_NAMES[short_major]}{short_desc}，叫 {short_bid} 报单缺作满贯试探。牌型：{length_text}。",
+                    "低花反加叫后报单缺",
+                )
+
+        # 2NT（15-17 HCP）：两高花均有止，倾向 3NT
+        if both_majors_stopped and 15 <= hcp <= 17 and is_legal_response_bid(response_bid, "2NT"):
+            return BidRecommendation(
+                "2NT",
+                f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP 且两高花均有止，叫 2NT 倾向 3NT。牌型：{length_text}。",
+                "低花反加叫后 2NT",
+            )
+
+        # 顺叫另一低花（12-14 HCP）：低限，至少一高花有止，不排斥 3NT
+        # 1♣-2♣ → 2♦；1♦-2♦ → 3♣
+        if hcp <= 14 and (spade_stop or heart_stop):
+            other_level = 2 if opener_suit == "C" else 3
+            other_bid = f"{other_level}{other_minor_sym}"
+            if is_legal_response_bid(response_bid, other_bid):
+                return BidRecommendation(
+                    other_bid,
+                    f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP（低限）且至少一高花有止，顺叫 {other_bid}，不排斥最终 3NT。牌型：{length_text}。",
+                    "低花反加叫后顺叫低花",
+                )
+
+        # 重叫开叫低花（12-14 HCP）：低限，高花无止
+        rebid_minor = f"3{opening_strain}"
+        if is_legal_response_bid(response_bid, rebid_minor):
+            return BidRecommendation(
+                rebid_minor,
+                f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP（低限）且高花无止，叫 {rebid_minor} 低限止叫。牌型：{length_text}。",
+                "低花反加叫后低限重叫低花",
+            )
+
     # 一阶低花开叫后，同伴跳加叫到 3m 通常表示限制加叫（约 10-12）。
     # 开叫方均型且有成局实力时优先 3NT，否则以止叫为主，避免误走“再叫第二套”。
     if (

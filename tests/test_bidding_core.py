@@ -765,6 +765,22 @@ class RebidRecommendationTests(unittest.TestCase):
         result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
         self.assertNotEqual(result.rule_name, "低花反加叫后 2NT")
 
+    def test_inverted_minor_rebid_high_hcp_not_limited_fallback(self) -> None:
+        # 1♣-2♣，20 HCP，3-4-1-5，按约定应进入 4NT 关键张问叫
+        settings = RuleSettings(inverted_minors_enabled=True)
+        hand = evaluation(20, 3, 4, 1, 5, balanced=False, top_honors_by_suit={"S": 2, "H": 2, "D": 0, "C": 2})
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.rule_name, "低花反加叫后 4NT 问叫")
+        self.assertEqual(result.bid, "4NT")
+
+    def test_inverted_minor_rebid_twenty_plus_balanced_invites_six_nt(self) -> None:
+        # 1♦-2♦，20 HCP 均型，按约定叫 5NT 邀请 6NT
+        settings = RuleSettings(inverted_minors_enabled=True)
+        hand = evaluation(20, 3, 3, 4, 3, balanced=True, top_honors_by_suit={"S": 2, "H": 1, "D": 2, "C": 1})
+        result = recommend_opener_rebid("1♦", "2♦", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.rule_name, "低花反加叫后 5NT 邀请")
+        self.assertEqual(result.bid, "5NT")
+
 
 class UtilityRuleTests(unittest.TestCase):
     def test_parse_contract_bid(self) -> None:

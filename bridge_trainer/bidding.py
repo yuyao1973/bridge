@@ -658,6 +658,23 @@ def recommend_opener_rebid(
                 "低花反加叫后 3NT",
             )
 
+        # 20+ HCP：按 README 约定进入满贯探索
+        # - 非均型：4NT（以开叫低花为将牌的关键张问叫）
+        # - 均型：5NT（邀 6NT）
+        if hcp >= 20 and not evaluation.balanced and is_legal_response_bid(response_bid, "4NT"):
+            return BidRecommendation(
+                "4NT",
+                f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP 且非均型，按约定以开叫低花为将牌进入 4NT 关键张问叫。牌型：{length_text}。",
+                "低花反加叫后 4NT 问叫",
+            )
+
+        if hcp >= 20 and evaluation.balanced and is_legal_response_bid(response_bid, "5NT"):
+            return BidRecommendation(
+                "5NT",
+                f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP 且均型，按约定叫 5NT 邀请 6NT。牌型：{length_text}。",
+                "低花反加叫后 5NT 邀请",
+            )
+
         # 3♥/3♠ Splinter（18-21 HCP）：报高花单缺/缺门，强满贯试探
         if short_major is not None and 18 <= hcp <= 21:
             splinter_bid = f"3{suit_symbol(short_major)}"
@@ -702,11 +719,20 @@ def recommend_opener_rebid(
 
         # 重叫开叫低花（12-14 HCP）：低限，高花无止
         rebid_minor = f"3{opening_strain}"
-        if is_legal_response_bid(response_bid, rebid_minor):
+        if hcp <= 14 and is_legal_response_bid(response_bid, rebid_minor):
             return BidRecommendation(
                 rebid_minor,
                 f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP（低限）且高花无止，叫 {rebid_minor} 低限止叫。牌型：{length_text}。",
                 "低花反加叫后低限重叫低花",
+            )
+
+        # 高限牌但未命中既有分支（例如无高花短门且不在 2NT/3NT 处理范围）时，
+        # 仍可通过再叫低花继续描述，避免误标为“低限”。
+        if is_legal_response_bid(response_bid, rebid_minor):
+            return BidRecommendation(
+                rebid_minor,
+                f"同伴低花反加叫 {response_bid} 后，你有 {hcp} HCP（高限），当前不满足 2NT/3NT 或高花短门分支，先以 {rebid_minor} 继续描述牌型。牌型：{length_text}。",
+                "低花反加叫后高限继续描述",
             )
 
     # 一阶低花开叫后，同伴跳加叫到 3m 通常表示限制加叫（约 10-12）。

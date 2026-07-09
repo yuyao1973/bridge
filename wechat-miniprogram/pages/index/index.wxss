@@ -8,3 +8,11 @@
   font-weight: 700;
   color: #0f5132;
 }
+
+.danger-btn {
+  margin-top: 20rpx;
+  border-radius: 16rpx;
+  background: #fff1f3;
+  color: #b42318;
+  border: 1rpx solid #fda29b;
+}

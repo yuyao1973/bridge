@@ -10,6 +10,7 @@
     <button class="secondary-btn" bindtap="startOpenerRebid">开叫者再叫训练</button>
     <button class="secondary-btn" bindtap="startResponderRebid">应叫者第二次应叫训练</button>
     <button class="secondary-btn" bindtap="openSettings">叫牌规则设置</button>
+    <button class="danger-btn" bindtap="exitAppWithCleanup">退出并清缓存</button>
   </view>
 
   <view class="card">

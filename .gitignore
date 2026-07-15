@@ -8,3 +8,8 @@ __pycache__/
 build/
 dist/
 *.spec.bak
+wechat-miniprogram/config/local.js
+wechat-miniprogram/project.private.config.json
+wechat-miniprogram/cloudfunctions/*/
+!wechat-miniprogram/cloudfunctions/.gitkeep
+wechat-miniprogram/.cloudbase/

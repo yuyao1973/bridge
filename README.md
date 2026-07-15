@@ -177,7 +177,16 @@ uvicorn api:app --host 0.0.0.0 --port 8001
 
 ## 云开发（推荐）
 
-小程序已绑定云开发环境：`cloud1-d3g942xe37289a824`。
+小程序通过 `config/local.js` 与 `project.private.config.json` 读取本机私有配置（均已加入 `.gitignore`，不会进入版本库）。
+
+首次克隆仓库后，请先准备本地配置：
+
+```powershell
+Copy-Item .\wechat-miniprogram\config\local.example.js .\wechat-miniprogram\config\local.js
+Copy-Item .\wechat-miniprogram\project.private.config.example.json .\wechat-miniprogram\project.private.config.json
+```
+
+然后编辑上述两个文件，填入你的 **AppID** 与 **云开发环境 ID**。
 
 当前推荐架构：
 
@@ -185,23 +194,30 @@ uvicorn api:app --host 0.0.0.0 --port 8001
 - 云托管容器运行 `api.py`（Starlette + Uvicorn）。
 - 本地 `apiBaseUrl` 仅作为开发回退路径。
 
-云托管容器目录：
+云托管容器模板目录：
 
 ```text
-wechat-miniprogram/cloudfunctions/cloud1-d3g942xe37289a824/containers/bridge-api/
+wechat-miniprogram/cloudtemplates/bridge-api/
 ```
 
-在微信开发者工具中部署云托管时，选择上面的目录作为服务代码目录即可。
+将模板部署到你的云环境目录（`YOUR_CLOUD_ENV_ID` 替换为实际环境 ID）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\wechat-miniprogram\scripts\setup_cloud_container.ps1 -CloudEnvId YOUR_CLOUD_ENV_ID
+```
+
+部署后，在微信开发者工具中选择 `wechat-miniprogram/cloudfunctions/YOUR_CLOUD_ENV_ID/containers/bridge-api/` 作为服务代码目录。
 
 ## 运行微信小程序
 
 1. 打开微信开发者工具。
 2. 选择“导入项目”。
 3. 项目目录选择 `wechat-miniprogram`。
-4. 没有 AppID 时可先使用测试号或游客模式。
-5. 本地调试时，在微信开发者工具中关闭“校验合法域名”。
-6. 推荐先部署云托管容器并确认服务可用，再编译运行小程序。
-7. 如需离线调试，可先启动本地 API 后端，再使用本地回退地址调试。
+4. 按上文「云开发」章节准备 `config/local.js` 与 `project.private.config.json`。
+5. 没有 AppID 时可先使用测试号或游客模式。
+6. 本地调试时，在微信开发者工具中关闭“校验合法域名”。
+7. 推荐先部署云托管容器并确认服务可用，再编译运行小程序。
+8. 如需离线调试，可先启动本地 API 后端，再使用本地回退地址调试。
 
 正式发布时，优先使用云托管内网调用；若使用公网调用，需要在微信公众平台配置 request 合法域名。
 

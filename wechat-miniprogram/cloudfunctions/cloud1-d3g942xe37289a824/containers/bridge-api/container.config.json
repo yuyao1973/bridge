@@ -1,0 +1,10 @@
+{
+  "containerPort": 8001,
+  "cpu": 0.5,
+  "mem": 1,
+  "minNum": 0,
+  "maxNum": 3,
+  "policyDetails": {
+    "autoScale": true
+  }
+}

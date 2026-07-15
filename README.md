@@ -1,11 +1,11 @@
 # 桥牌 2/1 Game Force 叫牌训练器
 
-这是一个使用 Python + Streamlit 编写的桥牌叫牌训练小程序。当前版本聚焦于 **2/1 Game Force 的开叫、应叫、开叫者再叫与应叫者第二次应叫训练**：随机发牌、计算牌力与牌型、推荐叫品，并解释原因。
+这是一个桥牌 2/1 Game Force 叫牌训练项目。当前版本聚焦于 **开叫、应叫、开叫者再叫与应叫者第二次应叫训练**：随机发牌、计算牌力与牌型、推荐叫品，并解释原因。
 
-项目现在保留两个入口：
+项目当前提供两套使用方式：
 
 - 本地网页版本：`app.py`，使用 Streamlit 运行。
-- 微信小程序版本：`wechat-miniprogram/`，通过 `api.py` 提供的 Python ASGI 后端获取题目。
+- 微信小程序版本：`wechat-miniprogram/`，优先通过微信云开发云托管调用 Python API；本地调试可回退到 `http://127.0.0.1:8001`。
 
 ## 功能
 
@@ -132,6 +132,38 @@ streamlit run app.py
 
 如果 PowerShell 提示 “Python was not found”，请先安装 Python，或在 Windows 设置中关闭 Microsoft Store 的 Python 执行别名后重试。
 
+## 打包 Windows 桌面版（单机 exe）
+
+可将 Streamlit 网页版打包为 Windows 单机程序，分发给未安装 Python 的用户。打包后无需联网，双击即可在浏览器中打开训练界面。
+
+### 构建
+
+在项目根目录执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_desktop.ps1 -Clean
+```
+
+首次构建会安装 `pyinstaller`，并收集 Streamlit 依赖，通常需要数分钟。
+
+### 输出
+
+构建完成后，产物位于：
+
+```text
+dist/BridgeBiddingTrainer/
+  BridgeBiddingTrainer.exe   # 双击启动
+  ...                        # 运行时依赖文件
+```
+
+将整个 `BridgeBiddingTrainer` 文件夹压缩后发给其他用户即可。对方解压后双击 `BridgeBiddingTrainer.exe`，程序会自动打开浏览器访问 `http://localhost:8501`。
+
+### 说明
+
+- 当前采用 **目录式打包**（非单文件），总体积约 270MB，启动更稳定。
+- 启动时会保留一个控制台窗口，用于显示 Streamlit 日志；关闭该窗口即退出程序。
+- 若 8501 端口已被占用，请先关闭占用该端口的其他 Streamlit 实例。
+
 ## 运行 API 后端
 
 微信小程序前端需要先启动 API 后端：
@@ -141,7 +173,25 @@ streamlit run app.py
 uvicorn api:app --host 0.0.0.0 --port 8001
 ```
 
-开发环境接口地址默认是 `http://127.0.0.1:8001`，配置在 `wechat-miniprogram/app.js`。
+开发环境接口地址默认是 `http://127.0.0.1:8001`，用于本地回退调试。
+
+## 云开发（推荐）
+
+小程序已绑定云开发环境：`cloud1-d3g942xe37289a824`。
+
+当前推荐架构：
+
+- 小程序端通过 `wx.cloud.callContainer` 调用云托管容器。
+- 云托管容器运行 `api.py`（Starlette + Uvicorn）。
+- 本地 `apiBaseUrl` 仅作为开发回退路径。
+
+云托管容器目录：
+
+```text
+wechat-miniprogram/cloudfunctions/cloud1-d3g942xe37289a824/containers/bridge-api/
+```
+
+在微信开发者工具中部署云托管时，选择上面的目录作为服务代码目录即可。
 
 ## 运行微信小程序
 
@@ -150,9 +200,10 @@ uvicorn api:app --host 0.0.0.0 --port 8001
 3. 项目目录选择 `wechat-miniprogram`。
 4. 没有 AppID 时可先使用测试号或游客模式。
 5. 本地调试时，在微信开发者工具中关闭“校验合法域名”。
-6. 确认 API 后端已启动后，编译运行小程序。
+6. 推荐先部署云托管容器并确认服务可用，再编译运行小程序。
+7. 如需离线调试，可先启动本地 API 后端，再使用本地回退地址调试。
 
-正式发布时，需要把 `wechat-miniprogram/app.js` 中的 `apiBaseUrl` 改成 HTTPS 域名，并在微信公众平台配置 request 合法域名。
+正式发布时，优先使用云托管内网调用；若使用公网调用，需要在微信公众平台配置 request 合法域名。
 
 ## 测试
 
@@ -178,10 +229,13 @@ uvicorn api:app --host 0.0.0.0 --port 8001
 
 ```text
 app.py                     Streamlit 界面
-api.py                     Python ASGI 后端接口，供微信小程序调用
+desktop_launcher.py        桌面版 exe 启动入口
+bridge_trainer_desktop.spec PyInstaller 打包配置
+scripts/build_desktop.ps1  Windows 桌面版构建脚本
+api.py                     Python ASGI 后端接口
 bridge_trainer/cards.py    洗牌、发牌、格式化手牌
 bridge_trainer/evaluator.py 牌力和牌型评估
 bridge_trainer/bidding.py  2/1 开叫、应叫与开叫者再叫推荐规则
 bridge_trainer/training.py 训练题目生成
-wechat-miniprogram/        原生微信小程序前端
+wechat-miniprogram/        原生微信小程序前端（含云开发配置）
 ```

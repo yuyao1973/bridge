@@ -1,4 +1,5 @@
 {
+  "cloudbaseRoot": "cloudfunctions/",
   "description": "桥牌 2/1 Game Force 叫牌训练微信小程序",
   "packOptions": {
     "ignore": [],
@@ -31,7 +32,7 @@
   },
   "compileType": "miniprogram",
   "libVersion": "3.15.2",
-  "appid": "touristappid",
+  "appid": "wx70626f75fd00095e",
   "projectname": "bridge-bidding-trainer",
   "condition": {},
   "simulatorPluginLibVersion": {},

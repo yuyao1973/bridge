@@ -12,6 +12,22 @@ from pathlib import Path
 
 
 DEFAULT_PORT = 8501
+# Streamlit requires enableCORS and enableXsrfProtection to stay aligned:
+# both enabled or both disabled. Mismatched values are overridden at runtime.
+SERVER_ENABLE_CORS = False
+SERVER_ENABLE_XSRF_PROTECTION = False
+
+
+def streamlit_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def apply_streamlit_security_settings() -> tuple[str, str]:
+    cors = streamlit_bool(SERVER_ENABLE_CORS)
+    xsrf = streamlit_bool(SERVER_ENABLE_XSRF_PROTECTION)
+    os.environ["STREAMLIT_SERVER_ENABLE_CORS"] = cors
+    os.environ["STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION"] = xsrf
+    return cors, xsrf
 
 
 def base_path() -> Path:
@@ -42,6 +58,8 @@ def main() -> int:
 
     threading.Thread(target=open_browser, args=(DEFAULT_PORT,), daemon=True).start()
 
+    cors, xsrf = apply_streamlit_security_settings()
+
     from streamlit.web import cli as stcli
 
     sys.argv = [
@@ -50,6 +68,8 @@ def main() -> int:
         str(app_path),
         f"--server.port={DEFAULT_PORT}",
         "--server.headless=true",
+        f"--server.enableCORS={cors}",
+        f"--server.enableXsrfProtection={xsrf}",
         "--browser.gatherUsageStats=false",
         "--global.developmentMode=false",
     ]

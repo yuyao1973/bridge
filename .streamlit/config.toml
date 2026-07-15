@@ -1,6 +1,8 @@
 [server]
 headless = true
 port = 8501
+# enableCORS and enableXsrfProtection must both be true or both be false.
+# If only one is enabled, Streamlit overrides settings for security.
 enableCORS = false
 enableXsrfProtection = false
 

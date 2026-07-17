@@ -1,3 +1,11 @@
 {
-  "appid": "your-wechat-appid"
+  "libVersion": "3.7.12",
+  "projectname": "bridge-bidding-trainer",
+  "condition": {},
+  "setting": {
+    "urlCheck": false,
+    "compileHotReLoad": true,
+    "ignoreDevUnusedFiles": false,
+    "bigPackageSizeSupport": true
+  }
 }

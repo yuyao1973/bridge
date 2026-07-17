@@ -1,7 +1,7 @@
 <view class="container">
   <view class="card hero">
     <view class="title">♠ 桥牌 2/1 叫牌训练</view>
-    <view class="subtitle">保留本地 Streamlit 网页版，同时提供原生微信小程序前端。请先启动 Python API 后端。</view>
+    <view class="subtitle">默认离线运行：出题与判题均在本地完成，无需启动 API、无需云开发。</view>
   </view>
 
   <view class="card">
@@ -15,6 +15,6 @@
 
   <view class="card">
     <view class="section-title">使用说明</view>
-    <view class="subtitle">开发环境默认 API 地址为 http://127.0.0.1:8000。真机或正式发布时需要替换为 HTTPS 域名，并在微信公众平台配置合法域名。</view>
+    <view class="subtitle">直接点上方按钮开始训练即可。若编译/控制台出现 500 或无反应，请用纯英文路径导入项目（例如 C:\source_code\bridge\wechat-miniprogram），并使用测试号 AppID。</view>
   </view>
 </view>

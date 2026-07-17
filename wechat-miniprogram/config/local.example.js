@@ -1,8 +1,7 @@
 module.exports = {
-  // 微信云开发环境 ID，在云开发控制台查看。
-  cloudEnv: 'your-cloud-env-id',
-  // 是否优先使用云托管；未配置 cloudEnv 时会自动关闭。
-  useCloudBackend: true,
-  // 可选：云托管公网回退地址（HTTPS）。
+  // 当前小程序默认使用本地离线引擎，无需配置云环境。
+  // 以下字段仅在未来重新启用云托管时需要填写。
+  cloudEnv: '',
+  useCloudBackend: false,
   cloudApiBaseUrl: ''
 }

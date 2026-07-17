@@ -4,9 +4,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
-$TemplateDir = Join-Path $ProjectRoot "cloudtemplates\bridge-api"
-$TargetDir = Join-Path $ProjectRoot "cloudfunctions\$CloudEnvId\containers\bridge-api"
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$TemplateDir = Join-Path $RepoRoot "cloudtemplates\bridge-api"
+$TargetDir = Join-Path $RepoRoot "wechat-miniprogram\cloudfunctions\$CloudEnvId\containers\bridge-api"
 
 if (-not (Test-Path $TemplateDir)) {
     Write-Error "Cloud template not found: $TemplateDir"

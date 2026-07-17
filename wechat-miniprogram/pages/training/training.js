@@ -1,5 +1,8 @@
-const api = require('../../utils/api')
 const { loadSettings } = require('../../utils/settings')
+
+function getApi() {
+  return require('../../utils/api')
+}
 
 const SCORE_STATS_KEY = 'bridge_score_stats'
 const OPENER_CATEGORY_OPTIONS = ['一阶定约', '强开叫', '阻击叫']
@@ -84,6 +87,7 @@ Page({
     const modeStats = stats.byMode[mode] || { total: 0, correct: 0 }
     const allRate = stats.total ? (stats.correct / stats.total * 100).toFixed(1) : '0.0'
     const modeRate = modeStats.total ? (modeStats.correct / modeStats.total * 100).toFixed(1) : '0.0'
+    this._loadToken = 0
     this.setData({
       mode,
       modeText: this.getModeText(mode),
@@ -108,7 +112,54 @@ Page({
 
   onShow() {
     this.refreshPracticalProfile(true)
-    this.loadQuestion()
+    // Do not auto-reload questions here: onLoad already loads once,
+    // and re-entering would re-trigger heavy search on WeChat.
+  },
+
+  loadQuestion() {
+    const token = (this._loadToken || 0) + 1
+    this._loadToken = token
+    this.setData({ loading: true, error: '', submitted: false, answer: null, feedbackTitle: '', selectedBid: 'Pass' })
+
+    const opener = this.data.openerOptions[this.data.openerIndex] || '随机'
+    const openerCategory = this.data.openerCategoryOptions[this.data.openerCategoryIndex] || null
+    const responseBid = this.data.responseBidOptions[this.data.responseBidIndex] || '随机'
+    const openerRebidBid = this.data.openerRebidBidOptions[this.data.openerRebidBidIndex] || '随机'
+    const payload = {
+      mode: this.data.mode,
+      opener_bid: opener === '随机' ? null : opener,
+      opener_category: this.data.mode === 'opening' ? null : openerCategory,
+      response_bid: responseBid === '随机' ? null : responseBid,
+      opener_rebid_bid: openerRebidBid === '随机' ? null : openerRebidBid,
+      settings: loadSettings()
+    }
+
+    getApi().createQuestion(payload).then((question) => {
+      if (token !== this._loadToken) {
+        return
+      }
+      const bidItems = question.choices.map((bid) => ({
+        bid,
+        legal: question.legal_choices.indexOf(bid) >= 0,
+        strainClass: this.getBidStrainClass(bid)
+      }))
+      const auctionBids = this.parseAuctionBids(question.auction)
+      this.setData({
+        question,
+        bidItems,
+        auctionBids,
+        bidGridClass: this.getBidGridClass(bidItems.length),
+        selectedBidLegal: question.legal_choices.indexOf('Pass') >= 0,
+        appVersion: question.app_version || '--',
+        buildTime: question.build_time || '--',
+        loading: false
+      })
+    }).catch((error) => {
+      if (token !== this._loadToken) {
+        return
+      }
+      this.setData({ loading: false, error: `出题失败：${error.message || error.errMsg || error}` })
+    })
   },
 
   getPracticalProfileText() {
@@ -327,42 +378,6 @@ Page({
       return OPENER_BIDS_BY_CATEGORY[category] || OPENER_BIDS_BY_CATEGORY['一阶定约']
     }
     return ['随机']
-  },
-
-  async loadQuestion() {
-    this.setData({ loading: true, error: '', submitted: false, answer: null, feedbackTitle: '', selectedBid: 'Pass' })
-    try {
-      const opener = this.data.openerOptions[this.data.openerIndex] || '随机'
-      const openerCategory = this.data.openerCategoryOptions[this.data.openerCategoryIndex] || null
-      const responseBid = this.data.responseBidOptions[this.data.responseBidIndex] || '随机'
-      const openerRebidBid = this.data.openerRebidBidOptions[this.data.openerRebidBidIndex] || '随机'
-      const question = await api.createQuestion({
-        mode: this.data.mode,
-        opener_bid: opener === '随机' ? null : opener,
-        opener_category: this.data.mode === 'opening' ? null : openerCategory,
-        response_bid: responseBid === '随机' ? null : responseBid,
-        opener_rebid_bid: openerRebidBid === '随机' ? null : openerRebidBid,
-        settings: loadSettings()
-      })
-      const bidItems = question.choices.map((bid) => ({
-        bid,
-        legal: question.legal_choices.indexOf(bid) >= 0,
-        strainClass: this.getBidStrainClass(bid)
-      }))
-      const auctionBids = this.parseAuctionBids(question.auction)
-      this.setData({
-        question,
-        bidItems,
-        auctionBids,
-        bidGridClass: this.getBidGridClass(bidItems.length),
-        selectedBidLegal: question.legal_choices.indexOf('Pass') >= 0,
-        appVersion: question.app_version || '--',
-        buildTime: question.build_time || '--',
-        loading: false
-      })
-    } catch (error) {
-      this.setData({ loading: false, error: `无法连接后端 API：${error.message || error.errMsg || error}` })
-    }
   },
 
   selectBid(event) {
@@ -737,7 +752,7 @@ Page({
     }
     const recommendation = this.data.question.recommendation
     try {
-      const answer = await api.checkAnswer({
+      const answer = await getApi().checkAnswer({
         selected_bid: this.data.selectedBid,
         recommended_bid: recommendation.bid,
         acceptable_bids: this.data.question.acceptable_bids || [recommendation.bid],

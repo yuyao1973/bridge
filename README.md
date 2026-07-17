@@ -5,7 +5,7 @@
 项目当前提供两套使用方式：
 
 - 本地网页版本：`app.py`，使用 Streamlit 运行。
-- 微信小程序版本：`wechat-miniprogram/`，优先通过微信云开发云托管调用 Python API；本地调试可回退到 `http://127.0.0.1:8001`。
+- 微信小程序版本：`wechat-miniprogram/`，**默认离线运行**（规则引擎已移植为本地 JS）；可选配置云托管作为后端。
 
 ## 功能
 
@@ -175,51 +175,61 @@ uvicorn api:app --host 0.0.0.0 --port 8001
 
 开发环境接口地址默认是 `http://127.0.0.1:8001`，用于本地回退调试。
 
-## 云开发（推荐）
+## 微信小程序（默认离线）
 
-小程序通过 `config/local.js` 与 `project.private.config.json` 读取本机私有配置（均已加入 `.gitignore`，不会进入版本库）。
+小程序已内置 JS 版叫牌规则引擎（`wechat-miniprogram/utils/bridge_trainer/`），出题与判题均在本地完成，**无需联网、无需启动 API、无需云开发**。
 
-首次克隆仓库后，请先准备本地配置：
+在微信开发者工具中导入 `wechat-miniprogram` 目录即可直接编译运行。
+
+本地引擎与 Python `bridge_trainer` 对齐，可用以下脚本做冒烟校验：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install quickjs
+.\.venv\Scripts\python.exe scripts\smoke_offline_js.py
+```
+
+### 可选：云开发后端
+
+若仍需使用云托管（例如后续扩展账号/排行榜），可通过本机私有配置启用：
+
+小程序离线版默认**不读取** `config/local.js`（避免微信端对缺失模块的 require 直接报错）。如需云开发，可自行扩展 `app.js` 并准备：
 
 ```powershell
 Copy-Item .\wechat-miniprogram\config\local.example.js .\wechat-miniprogram\config\local.js
 Copy-Item .\wechat-miniprogram\project.private.config.example.json .\wechat-miniprogram\project.private.config.json
 ```
 
-然后编辑上述两个文件，填入你的 **AppID** 与 **云开发环境 ID**。
+然后编辑上述文件，填入你的 **AppID** 与 **云开发环境 ID**。
 
-当前推荐架构：
-
-- 小程序端通过 `wx.cloud.callContainer` 调用云托管容器。
-- 云托管容器运行 `api.py`（Starlette + Uvicorn）。
-- 本地 `apiBaseUrl` 仅作为开发回退路径。
+注意：当前 `utils/api.js` 已切换为本地离线引擎；云托管调用代码仍保留在仓库历史与模板中，但默认不再走网络。
 
 云托管容器模板目录：
 
 ```text
-wechat-miniprogram/cloudtemplates/bridge-api/
+cloudtemplates/bridge-api/
 ```
 
 将模板部署到你的云环境目录（`YOUR_CLOUD_ENV_ID` 替换为实际环境 ID）：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\wechat-miniprogram\scripts\setup_cloud_container.ps1 -CloudEnvId YOUR_CLOUD_ENV_ID
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_cloud_container.ps1 -CloudEnvId YOUR_CLOUD_ENV_ID
 ```
 
 部署后，在微信开发者工具中选择 `wechat-miniprogram/cloudfunctions/YOUR_CLOUD_ENV_ID/containers/bridge-api/` 作为服务代码目录。
 
 ## 运行微信小程序
 
-1. 打开微信开发者工具。
-2. 选择“导入项目”。
-3. 项目目录选择 `wechat-miniprogram`。
-4. 按上文「云开发」章节准备 `config/local.js` 与 `project.private.config.json`。
-5. 没有 AppID 时可先使用测试号或游客模式。
-6. 本地调试时，在微信开发者工具中关闭“校验合法域名”。
-7. 推荐先部署云托管容器并确认服务可用，再编译运行小程序。
-8. 如需离线调试，可先启动本地 API 后端，再使用本地回退地址调试。
+1. **完全退出**微信开发者工具。
+2. 若最近项目里已有本项目，先删除该项目记录（不删代码）。
+3. 重新打开工具 →「导入项目」。
+4. 目录请选纯英文路径：`C:\source_code\bridge\wechat-miniprogram`（避免中文路径）。
+5. AppID 在导入对话框里直接选 **测试号**（不要事后在「详情」里改 AppID，否则易报「更改 App ID 失败」）。
+6. 默认离线模式可直接编译运行，无需后端。
+7. 如需真实 AppID / 云开发，再按上文准备私有配置；且 `project.config.json` 与私有配置的 appid 必须一致。
 
-正式发布时，优先使用云托管内网调用；若使用公网调用，需要在微信公众平台配置 request 合法域名。
+> 若仍报「更改 App ID 失败」：先删掉目录下的 `project.private.config.json`（若有），再按上面步骤用英文路径重新导入。该报错来自开发者工具本身，与离线引擎无关。
+
+正式发布时，离线版无需配置 request 合法域名。
 
 ## 测试
 
@@ -248,10 +258,12 @@ app.py                     Streamlit 界面
 desktop_launcher.py        桌面版 exe 启动入口
 bridge_trainer_desktop.spec PyInstaller 打包配置
 scripts/build_desktop.ps1  Windows 桌面版构建脚本
-api.py                     Python ASGI 后端接口
+scripts/smoke_offline_js.py 小程序离线引擎冒烟测试
+api.py                     Python ASGI 后端接口（可选）
 bridge_trainer/cards.py    洗牌、发牌、格式化手牌
 bridge_trainer/evaluator.py 牌力和牌型评估
 bridge_trainer/bidding.py  2/1 开叫、应叫与开叫者再叫推荐规则
 bridge_trainer/training.py 训练题目生成
-wechat-miniprogram/        原生微信小程序前端（含云开发配置）
+wechat-miniprogram/        原生微信小程序前端（默认离线）
+wechat-miniprogram/utils/bridge_trainer/  小程序本地规则引擎（JS）
 ```

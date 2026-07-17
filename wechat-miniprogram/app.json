@@ -1,5 +1,4 @@
 {
-  "cloud": true,
   "pages": [
     "pages/index/index",
     "pages/training/training",
@@ -14,3 +13,4 @@
   "style": "v2",
   "sitemapLocation": "sitemap.json"
 }
+

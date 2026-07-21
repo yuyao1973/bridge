@@ -35,6 +35,12 @@ RESPONSE_FILTER_SEARCH_ATTEMPTS = 15_000
 REBID_FILTER_SEARCH_ATTEMPTS = 40_000
 DIRECTED_OPENER_REBID_SEARCH_ATTEMPTS = 120_000
 DIRECTED_RESPONDER_REBID_SEARCH_ATTEMPTS = 180_000
+# Cap "should Pass" opening deals (below opening strength and no weak/preempt).
+# Use integer modulo (not Random(seed).random()) so sequential seeds stay unbiased.
+OPENING_PASS_MAX_RATE = 0.09
+OPENING_PASS_RATE_DENOM = 100
+OPENING_PASS_RATE_NUM = 9
+OPENING_DEAL_SEARCH_ATTEMPTS = 50
 
 DIRECTED_OPENER_REBID_SEQUENCES: set[tuple[str, str]] = {
     ("1NT", "2♣"),
@@ -343,8 +349,7 @@ def get_sequence_constraints(
     return None
 
 
-def generate_opening_question(seed: int | None = None, settings: RuleSettings | None = None) -> TrainingQuestion:
-    settings = settings or default_rule_settings()
+def _build_opening_question(seed: int, settings: RuleSettings) -> TrainingQuestion:
     hands = deal(seed)
     hand = hands["S"]
     evaluation = evaluate_hand(hand)
@@ -364,6 +369,30 @@ def generate_opening_question(seed: int | None = None, settings: RuleSettings | 
         ),
         mode="开叫训练",
     )
+
+
+def generate_opening_question(seed: int | None = None, settings: RuleSettings | None = None) -> TrainingQuestion:
+    settings = settings or default_rule_settings()
+    base_seed = seed if seed is not None else random.randint(1, 1_000_000_000)
+    prefer_pass = (abs(base_seed) % OPENING_PASS_RATE_DENOM) < OPENING_PASS_RATE_NUM
+
+    fallback: TrainingQuestion | None = None
+    if prefer_pass:
+        for offset in range(OPENING_DEAL_SEARCH_ATTEMPTS):
+            question = _build_opening_question(base_seed + offset, settings)
+            if fallback is None:
+                fallback = question
+            if question.recommendation.bid == "Pass":
+                return question
+        return fallback  # type: ignore[return-value]
+
+    for offset in range(OPENING_DEAL_SEARCH_ATTEMPTS):
+        question = _build_opening_question(base_seed + offset, settings)
+        if fallback is None:
+            fallback = question
+        if question.recommendation.bid != "Pass":
+            return question
+    return fallback  # type: ignore[return-value]
 
 
 def generate_response_question(

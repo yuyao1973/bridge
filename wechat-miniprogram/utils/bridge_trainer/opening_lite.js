@@ -35,6 +35,12 @@ const OPENING_BIDS = [
 const SUIT_NAMES = { S: "黑桃", H: "红心", D: "方块", C: "梅花" };
 const SUIT_SYMBOL = { S: "♠", H: "♥", D: "♦", C: "♣" };
 
+/** Cap Pass deals (below opening strength and no weak two) below 10%. */
+const OPENING_PASS_MAX_RATE = 0.09;
+const OPENING_PASS_RATE_DENOM = 100;
+const OPENING_PASS_RATE_NUM = 9;
+const OPENING_DEAL_SEARCH_ATTEMPTS = 50;
+
 function defaultSettings() {
   return {
     opening_min_hcp: 12,
@@ -117,8 +123,7 @@ function recommendOpening(evaluation, settings) {
   };
 }
 
-function generateOpeningLite(seed, settingsPayload) {
-  const settings = Object.assign({}, defaultSettings(), settingsPayload || {});
+function buildOpeningQuestion(seed, settings) {
   const hands = deal(seed);
   const hand = hands.S;
   const evaluation = evaluate_hand(hand);
@@ -141,8 +146,41 @@ function generateOpeningLite(seed, settingsPayload) {
   };
 }
 
+function generateOpeningLite(seed, settingsPayload) {
+  const settings = Object.assign({}, defaultSettings(), settingsPayload || {});
+  const baseSeed = seed == null ? Date.now() : Number(seed);
+  const preferPass = (Math.abs(Math.floor(baseSeed)) % OPENING_PASS_RATE_DENOM) < OPENING_PASS_RATE_NUM;
+
+  let fallback = null;
+  if (preferPass) {
+    for (let offset = 0; offset < OPENING_DEAL_SEARCH_ATTEMPTS; offset += 1) {
+      const question = buildOpeningQuestion(baseSeed + offset, settings);
+      if (fallback === null) {
+        fallback = question;
+      }
+      if (question.recommendation.bid === "Pass") {
+        return question;
+      }
+    }
+    return fallback;
+  }
+
+  for (let offset = 0; offset < OPENING_DEAL_SEARCH_ATTEMPTS; offset += 1) {
+    const question = buildOpeningQuestion(baseSeed + offset, settings);
+    if (fallback === null) {
+      fallback = question;
+    }
+    if (question.recommendation.bid !== "Pass") {
+      return question;
+    }
+  }
+  return fallback;
+}
+
 module.exports = {
   OPENING_BIDS,
+  OPENING_PASS_MAX_RATE,
+  OPENING_DEAL_SEARCH_ATTEMPTS,
   generateOpeningLite,
   recommendOpening,
 };

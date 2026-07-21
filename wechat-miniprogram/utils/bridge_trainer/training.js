@@ -37,6 +37,11 @@ const DIRECTED_OPENER_REBID_SEARCH_ATTEMPTS = 80
 const DIRECTED_RESPONDER_REBID_SEARCH_ATTEMPTS = 80
 const TARGETED_OPENER_ATTEMPTS = 15
 const TARGETED_RESPONDER_ATTEMPTS = 10
+// Cap "should Pass" opening deals (below opening strength and no weak/preempt).
+const OPENING_PASS_MAX_RATE = 0.09
+const OPENING_PASS_RATE_DENOM = 100
+const OPENING_PASS_RATE_NUM = 9
+const OPENING_DEAL_SEARCH_ATTEMPTS = 50
 
 const DIRECTED_OPENER_REBID_SEQUENCES = new Set([
   '1NT|2♣',
@@ -361,13 +366,12 @@ function getSequenceConstraints(openerBid, responseBid, openerRebidBid, settings
   return null
 }
 
-function generateOpeningQuestion(seed = null, settings = null) {
-  const resolvedSettings = settings || defaultRuleSettings()
+function buildOpeningQuestion(seed, settings) {
   const hands = deal(seed)
   const hand = hands.S
   const evaluation = evaluate_hand(hand)
   const vulnerability = chooseVulnerability(seed)
-  const recommendation = recommend_opening(evaluation, resolvedSettings, vulnerability)
+  const recommendation = recommend_opening(evaluation, settings, vulnerability)
   return createTrainingQuestion({
     hand,
     evaluation,
@@ -382,6 +386,37 @@ function generateOpeningQuestion(seed = null, settings = null) {
     ),
     mode: '开叫训练',
   })
+}
+
+function generateOpeningQuestion(seed = null, settings = null) {
+  const resolvedSettings = settings || defaultRuleSettings()
+  const baseSeed = seed != null ? seed : Math.floor(Math.random() * 1000000000) + 1
+  const preferPass = (Math.abs(Math.floor(baseSeed)) % OPENING_PASS_RATE_DENOM) < OPENING_PASS_RATE_NUM
+
+  let fallback = null
+  if (preferPass) {
+    for (let offset = 0; offset < OPENING_DEAL_SEARCH_ATTEMPTS; offset += 1) {
+      const question = buildOpeningQuestion(baseSeed + offset, resolvedSettings)
+      if (fallback === null) {
+        fallback = question
+      }
+      if (question.recommendation.bid === 'Pass') {
+        return question
+      }
+    }
+    return fallback
+  }
+
+  for (let offset = 0; offset < OPENING_DEAL_SEARCH_ATTEMPTS; offset += 1) {
+    const question = buildOpeningQuestion(baseSeed + offset, resolvedSettings)
+    if (fallback === null) {
+      fallback = question
+    }
+    if (question.recommendation.bid !== 'Pass') {
+      return question
+    }
+  }
+  return fallback
 }
 
 function generateResponseQuestion(

@@ -182,11 +182,22 @@ function maxSuitByLength(candidates, lengths) {
   });
 }
 
-function maxWeakTwoCandidate(candidates, lengths) {
+function maxWeakTwoCandidate(candidates, lengths, topHonorsBySuit) {
+  const honors = topHonorsBySuit || {};
   return candidates.reduce((best, suit) => {
-    const score = [lengths[suit], suit === "S" ? 1 : 0, suit === "H" ? 1 : 0];
-    const bestScore = [lengths[best], best === "S" ? 1 : 0, best === "H" ? 1 : 0];
-    for (let i = 0; i < 3; i++) {
+    const score = [
+      honors[suit] || 0,
+      lengths[suit],
+      suit === "S" ? 1 : 0,
+      suit === "H" ? 1 : 0,
+    ];
+    const bestScore = [
+      honors[best] || 0,
+      lengths[best],
+      best === "S" ? 1 : 0,
+      best === "H" ? 1 : 0,
+    ];
+    for (let i = 0; i < 4; i++) {
       if (score[i] !== bestScore[i]) {
         return score[i] > bestScore[i] ? suit : best;
       }
@@ -245,6 +256,14 @@ function recommend_opening(evaluation, settings, vulnerability) {
   }
 
   if (evaluation.balanced && hcp >= settings.one_nt_min && hcp <= settings.one_nt_max) {
+    const secondary = one_nt_secondary_major_opening_bid(lengths);
+    if (secondary !== null) {
+      return bidRecommendation(
+        "1NT",
+        `${hcp} HCP 且均型，优先开叫 1NT；持有 5 张高花时，开叫 ${secondary} 为次优。牌型：${length_text}。`,
+        `${settings.one_nt_min}-${settings.one_nt_max} 均型 1NT`,
+      );
+    }
     return bidRecommendation(
       "1NT",
       `${hcp} HCP 且均型，符合当前设置的 ${settings.one_nt_min}-${settings.one_nt_max} 均型 1NT 开叫。牌型：${length_text}。`,
@@ -270,6 +289,25 @@ function recommend_opening(evaluation, settings, vulnerability) {
     );
   }
 
+  if (hcp === 11) {
+    const lightSuit = choose_eleven_hcp_opening(lengths);
+    if (lightSuit !== null) {
+      const secondary = eleven_hcp_secondary_opening_bid(lengths, lightSuit);
+      if (secondary !== null) {
+        return bidRecommendation(
+          `1${suit_symbol(lightSuit)}`,
+          `${hcp} HCP，双套轻开叫优先开较短高花 1${suit_symbol(lightSuit)}；开叫较长低花 ${secondary} 为次优。牌型：${length_text}。`,
+          "11 点轻开叫",
+        );
+      }
+      return bidRecommendation(
+        `1${suit_symbol(lightSuit)}`,
+        `${hcp} HCP，符合轻开叫条件，开叫 1${suit_symbol(lightSuit)}。牌型：${length_text}。`,
+        "11 点轻开叫",
+      );
+    }
+  }
+
   const preempt = settings.weak_two_enabled ? choose_preempt_opening(lengths, hcp) : null;
   if (preempt !== null) {
     return bidRecommendation(
@@ -279,8 +317,18 @@ function recommend_opening(evaluation, settings, vulnerability) {
     );
   }
 
-  const weak_two = settings.weak_two_enabled ? choose_weak_two(lengths, hcp) : null;
+  const weak_two = settings.weak_two_enabled
+    ? choose_weak_two(lengths, hcp, evaluation.top_honors_by_suit)
+    : null;
   if (weak_two !== null) {
+    const sixCardSuits = ["S", "H", "D", "C"].filter((suit) => lengths[suit] === 6);
+    if (sixCardSuits.length >= 2) {
+      return bidRecommendation(
+        `2${suit_symbol(weak_two)}`,
+        `${hcp} HCP，6-6 双套，按套质量开叫二阶 ${SUIT_NAMES[weak_two]}。当前训练不使用弱 2♣。牌型：${length_text}。`,
+        "6-6 双套弱二",
+      );
+    }
     return bidRecommendation(
       `2${suit_symbol(weak_two)}`,
       `${hcp} HCP，持有 6 张 ${SUIT_NAMES[weak_two]}，可作二阶弱二开叫。当前训练不使用弱 2♣。牌型：${length_text}。`,
@@ -1972,6 +2020,101 @@ function choose_major_opening(lengths) {
   return "H";
 }
 
+function one_nt_secondary_major_opening_bid(lengths) {
+  if (lengths.S < 5 && lengths.H < 5) {
+    return null;
+  }
+  return `1${suit_symbol(choose_major_opening(lengths))}`;
+}
+
+function has_singleton_or_void(lengths) {
+  return Math.min(lengths.S, lengths.H, lengths.D, lengths.C) <= 1;
+}
+
+function choose_eleven_hcp_long_suit_with_shortage(lengths) {
+  if (!has_singleton_or_void(lengths)) {
+    return null;
+  }
+  const longSuits = ["S", "H", "D", "C"].filter((suit) => lengths[suit] >= 6);
+  if (!longSuits.length) {
+    return null;
+  }
+  return longSuits.slice().sort((a, b) => {
+    if (lengths[b] !== lengths[a]) {
+      return lengths[b] - lengths[a];
+    }
+    const rank = { S: 3, H: 2, D: 1, C: 0 };
+    return rank[b] - rank[a];
+  })[0];
+}
+
+function choose_eleven_hcp_two_suiter(lengths) {
+  const fivePlus = ["S", "H", "D", "C"].filter((suit) => lengths[suit] >= 5);
+  if (fivePlus.length < 2) {
+    return null;
+  }
+
+  const suitRank = { S: 4, H: 3, D: 2, C: 1 };
+  const majors = fivePlus.filter((suit) => suit === "S" || suit === "H");
+  const minors = fivePlus.filter((suit) => suit === "D" || suit === "C");
+
+  if (majors.length && minors.length) {
+    const maxMinorLen = Math.max.apply(
+      null,
+      minors.map((suit) => lengths[suit]),
+    );
+    const shortMajors = majors.filter((suit) => lengths[suit] < maxMinorLen);
+    if (shortMajors.length) {
+      return shortMajors.slice().sort((a, b) => {
+        if (lengths[a] !== lengths[b]) {
+          return lengths[a] - lengths[b];
+        }
+        return suitRank[b] - suitRank[a];
+      })[0];
+    }
+  }
+
+  return fivePlus.slice().sort((a, b) => {
+    if (lengths[b] !== lengths[a]) {
+      return lengths[b] - lengths[a];
+    }
+    return suitRank[b] - suitRank[a];
+  })[0];
+}
+
+function eleven_hcp_secondary_opening_bid(lengths, primarySuit) {
+  if (primarySuit !== "S" && primarySuit !== "H") {
+    return null;
+  }
+  const fivePlus = ["S", "H", "D", "C"].filter((suit) => lengths[suit] >= 5);
+  if (fivePlus.length < 2) {
+    return null;
+  }
+  const minors = fivePlus.filter((suit) => suit === "D" || suit === "C");
+  if (!minors.length) {
+    return null;
+  }
+  const longerMinor = minors.slice().sort((a, b) => {
+    if (lengths[b] !== lengths[a]) {
+      return lengths[b] - lengths[a];
+    }
+    const rank = { D: 1, C: 0 };
+    return rank[b] - rank[a];
+  })[0];
+  if (lengths[primarySuit] < lengths[longerMinor]) {
+    return `1${suit_symbol(longerMinor)}`;
+  }
+  return null;
+}
+
+function choose_eleven_hcp_opening(lengths) {
+  const twoSuiter = choose_eleven_hcp_two_suiter(lengths);
+  if (twoSuiter !== null) {
+    return twoSuiter;
+  }
+  return choose_eleven_hcp_long_suit_with_shortage(lengths);
+}
+
 function choose_minor_opening(lengths) {
   const clubs = lengths.C;
   const diamonds = lengths.D;
@@ -1987,7 +2130,7 @@ function choose_minor_opening(lengths) {
   return "D";
 }
 
-function choose_weak_two(lengths, hcp) {
+function choose_weak_two(lengths, hcp, topHonorsBySuit) {
   if (!(hcp >= 6 && hcp <= 10)) {
     return null;
   }
@@ -1995,7 +2138,7 @@ function choose_weak_two(lengths, hcp) {
   if (!candidates.length) {
     return null;
   }
-  return maxWeakTwoCandidate(candidates, lengths);
+  return maxWeakTwoCandidate(candidates, lengths, topHonorsBySuit);
 }
 
 function choose_preempt_opening(lengths, hcp) {
@@ -2086,6 +2229,8 @@ module.exports = {
   choose_preempt_opening,
   choose_two_over_one_suit,
   choose_one_level_major_response,
+  eleven_hcp_secondary_opening_bid,
+  one_nt_secondary_major_opening_bid,
   suit_symbol,
 };
 

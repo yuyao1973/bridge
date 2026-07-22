@@ -3,16 +3,33 @@
   padding-bottom: 42rpx;
 }
 
+.hero-meta {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #667085;
+}
+
+.hero-meta.updated {
+  color: #0f5132;
+  font-weight: 600;
+}
+
 .section-title {
   font-size: 32rpx;
   font-weight: 700;
   color: #0f5132;
 }
 
-.danger-btn {
+.em {
+  font-weight: 700;
+  color: #344054;
+}
+
+.help-list {
   margin-top: 20rpx;
-  border-radius: 16rpx;
-  background: #fff1f3;
-  color: #b42318;
-  border: 1rpx solid #fda29b;
+}
+
+.help-list view {
+  margin-top: 8rpx;
 }

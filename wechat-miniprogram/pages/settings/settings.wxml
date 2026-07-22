@@ -1,7 +1,6 @@
 <view class="container">
   <view class="card">
     <view class="title">叫牌规则设置</view>
-    <view class="subtitle">设置会保存在本机，并在生成新题目时发送给 Python API。</view>
   </view>
 
   <view class="card">
@@ -103,7 +102,7 @@
   </view>
 
   <view class="card">
-    <button class="primary-btn" bindtap="save">保存设置</button>
-    <button class="secondary-btn" bindtap="reset">恢复默认规则</button>
+    <view class="primary-btn {{hoverKey === 'save' ? 'is-hover' : ''}}" hover-class="primary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="save" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="save">保存设置</view>
+    <view class="secondary-btn {{hoverKey === 'reset' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="reset" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="reset">恢复默认规则</view>
   </view>
 </view>

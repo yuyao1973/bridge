@@ -4,14 +4,17 @@ const {
   RESPONSE_BIDS,
   RESPONDER_REBID_BIDS,
   defaultRuleSettings,
+  eleven_hcp_secondary_opening_bid,
   legal_response_bids,
   legal_rebid_bids,
   legal_responder_rebid_bids,
+  one_nt_secondary_major_opening_bid,
   parse_contract_bid,
   recommend_opening,
   recommend_opener_rebid,
   recommend_responder_rebid,
   recommend_response,
+  symbol_to_suit,
 } = require('./bidding')
 const { deal, new_deck, sort_hand } = require('./cards')
 const { evaluate_hand } = require('./evaluator')
@@ -372,6 +375,29 @@ function buildOpeningQuestion(seed, settings) {
   const evaluation = evaluate_hand(hand)
   const vulnerability = chooseVulnerability(seed)
   const recommendation = recommend_opening(evaluation, settings, vulnerability)
+  const acceptable = buildAcceptableBids(
+    recommendation.bid,
+    OPENING_BIDS,
+    'opening',
+  )
+  if (recommendation.rule_name === '11 点轻开叫') {
+    const contract = parse_contract_bid(recommendation.bid)
+    if (contract) {
+      const primary = symbol_to_suit(contract[1])
+      if (primary) {
+        const secondary = eleven_hcp_secondary_opening_bid(evaluation.lengths, primary)
+        if (secondary && acceptable.indexOf(secondary) < 0) {
+          acceptable.push(secondary)
+        }
+      }
+    }
+  }
+  if (recommendation.bid === '1NT' && /均型 1NT$/.test(recommendation.rule_name)) {
+    const secondary = one_nt_secondary_major_opening_bid(evaluation.lengths)
+    if (secondary && acceptable.indexOf(secondary) < 0) {
+      acceptable.push(secondary)
+    }
+  }
   return createTrainingQuestion({
     hand,
     evaluation,
@@ -379,11 +405,7 @@ function buildOpeningQuestion(seed, settings) {
     vulnerability,
     choices: OPENING_BIDS,
     legal_choices: OPENING_BIDS,
-    acceptable_bids: buildAcceptableBids(
-      recommendation.bid,
-      OPENING_BIDS,
-      'opening',
-    ),
+    acceptable_bids: acceptable,
     mode: '开叫训练',
   })
 }

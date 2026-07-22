@@ -1,4 +1,58 @@
+const { APP_VERSION, getBuildTime } = require('../../utils/version')
+const { loadSettings } = require('../../utils/settings')
+const { onHoverEnter, onHoverLeave } = require('../../utils/hover')
+
 Page({
+  data: {
+    appVersion: APP_VERSION,
+    buildTime: '--',
+    practicalProfile: '--',
+    practicalProfileUpdated: false,
+    hoverKey: ''
+  },
+
+  onHoverEnter,
+  onHoverLeave,
+
+  onLoad() {
+    this.refreshMeta()
+  },
+
+  onShow() {
+    this.refreshMeta(true)
+  },
+
+  getPracticalProfileText() {
+    const settings = loadSettings()
+    const mode = settings.scoring_mode || 'IMP'
+    const vulnText = settings.respect_vulnerability ? '考虑局况' : '不按局况调整'
+    const agg = Number(settings.game_aggressiveness || 0)
+    const aggText = `激进度 ${agg >= 0 ? '+' : ''}${agg}`
+    return `${mode} | ${vulnText} | ${aggText}`
+  },
+
+  refreshMeta(notifyIfChanged = false) {
+    const profile = this.getPracticalProfileText()
+    const changed = this.data.practicalProfile !== '--' && this.data.practicalProfile !== profile
+    this.setData({
+      practicalProfile: profile,
+      buildTime: getBuildTime(),
+      appVersion: APP_VERSION,
+      practicalProfileUpdated: notifyIfChanged && changed
+    })
+
+    if (notifyIfChanged && changed) {
+      wx.showToast({
+        title: '实战参数已更新',
+        icon: 'none',
+        duration: 1200
+      })
+      setTimeout(() => {
+        this.setData({ practicalProfileUpdated: false })
+      }, 1400)
+    }
+  },
+
   startOpening() {
     wx.navigateTo({ url: '/pages/training/training?mode=opening' })
   },

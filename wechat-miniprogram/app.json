@@ -10,6 +10,7 @@
     "navigationBarTextStyle": "white",
     "backgroundColor": "#f6f7f9"
   },
+  "resizable": true,
   "style": "v2",
   "sitemapLocation": "sitemap.json"
 }

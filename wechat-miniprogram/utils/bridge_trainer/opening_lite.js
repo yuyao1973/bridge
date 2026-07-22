@@ -61,6 +61,118 @@ function suitSymbol(suit) {
   return SUIT_SYMBOL[suit];
 }
 
+function oneNtSecondaryMajorOpeningBid(lengths) {
+  if (lengths.S < 5 && lengths.H < 5) {
+    return null;
+  }
+  const suit = lengths.S >= lengths.H ? "S" : "H";
+  return "1" + suitSymbol(suit);
+}
+
+function hasSingletonOrVoid(lengths) {
+  return Math.min(lengths.S, lengths.H, lengths.D, lengths.C) <= 1;
+}
+
+function chooseElevenHcpLongSuitWithShortage(lengths) {
+  if (!hasSingletonOrVoid(lengths)) {
+    return null;
+  }
+  const longSuits = ["S", "H", "D", "C"].filter(function (suit) {
+    return lengths[suit] >= 6;
+  });
+  if (!longSuits.length) {
+    return null;
+  }
+  return longSuits.slice().sort(function (a, b) {
+    if (lengths[b] !== lengths[a]) {
+      return lengths[b] - lengths[a];
+    }
+    const rank = { S: 3, H: 2, D: 1, C: 0 };
+    return rank[b] - rank[a];
+  })[0];
+}
+
+function chooseElevenHcpTwoSuiter(lengths) {
+  const fivePlus = ["S", "H", "D", "C"].filter(function (suit) {
+    return lengths[suit] >= 5;
+  });
+  if (fivePlus.length < 2) {
+    return null;
+  }
+
+  const suitRank = { S: 4, H: 3, D: 2, C: 1 };
+  const majors = fivePlus.filter(function (suit) {
+    return suit === "S" || suit === "H";
+  });
+  const minors = fivePlus.filter(function (suit) {
+    return suit === "D" || suit === "C";
+  });
+
+  if (majors.length && minors.length) {
+    const maxMinorLen = Math.max.apply(
+      null,
+      minors.map(function (suit) {
+        return lengths[suit];
+      }),
+    );
+    const shortMajors = majors.filter(function (suit) {
+      return lengths[suit] < maxMinorLen;
+    });
+    if (shortMajors.length) {
+      return shortMajors.slice().sort(function (a, b) {
+        if (lengths[a] !== lengths[b]) {
+          return lengths[a] - lengths[b];
+        }
+        return suitRank[b] - suitRank[a];
+      })[0];
+    }
+  }
+
+  return fivePlus.slice().sort(function (a, b) {
+    if (lengths[b] !== lengths[a]) {
+      return lengths[b] - lengths[a];
+    }
+    return suitRank[b] - suitRank[a];
+  })[0];
+}
+
+function elevenHcpSecondaryOpeningBid(lengths, primarySuit) {
+  if (primarySuit !== "S" && primarySuit !== "H") {
+    return null;
+  }
+  const fivePlus = ["S", "H", "D", "C"].filter(function (suit) {
+    return lengths[suit] >= 5;
+  });
+  if (fivePlus.length < 2) {
+    return null;
+  }
+  const minors = fivePlus.filter(function (suit) {
+    return suit === "D" || suit === "C";
+  });
+  if (!minors.length) {
+    return null;
+  }
+  const longerMinor = minors.slice().sort(function (a, b) {
+    if (lengths[b] !== lengths[a]) {
+      return lengths[b] - lengths[a];
+    }
+    const rank = { D: 1, C: 0 };
+    return rank[b] - rank[a];
+  })[0];
+  if (lengths[primarySuit] < lengths[longerMinor]) {
+    return "1" + suitSymbol(longerMinor);
+  }
+  return null;
+}
+
+function chooseElevenHcpOpening(lengths) {
+  const twoSuiter = chooseElevenHcpTwoSuiter(lengths);
+  if (twoSuiter) {
+    return twoSuiter;
+  }
+  return chooseElevenHcpLongSuitWithShortage(lengths);
+}
+
 function recommendOpening(evaluation, settings) {
   const hcp = evaluation.hcp;
   const lengths = evaluation.lengths;
@@ -81,6 +193,20 @@ function recommendOpening(evaluation, settings) {
     };
   }
   if (evaluation.balanced && hcp >= settings.one_nt_min && hcp <= settings.one_nt_max) {
+    const secondary = oneNtSecondaryMajorOpeningBid(lengths);
+    if (secondary) {
+      return {
+        bid: "1NT",
+        explanation:
+          hcp +
+          " HCP 均型，优先开叫 1NT；持有 5 张高花时，开叫 " +
+          secondary +
+          " 为次优。牌型：" +
+          lengthText +
+          "。",
+        rule_name: settings.one_nt_min + "-" + settings.one_nt_max + " 均型 1NT",
+      };
+    }
     return {
       bid: "1NT",
       explanation: hcp + " HCP 均型 1NT。牌型：" + lengthText + "。",
@@ -103,16 +229,72 @@ function recommendOpening(evaluation, settings) {
       rule_name: "低花开叫",
     };
   }
+  if (hcp === 11) {
+    const lightSuit = chooseElevenHcpOpening(lengths);
+    if (lightSuit) {
+      const secondary = elevenHcpSecondaryOpeningBid(lengths, lightSuit);
+      if (secondary) {
+        return {
+          bid: "1" + suitSymbol(lightSuit),
+          explanation:
+            hcp +
+            " HCP，双套轻开叫优先开较短高花 1" +
+            suitSymbol(lightSuit) +
+            "；开叫较长低花 " +
+            secondary +
+            " 为次优。牌型：" +
+            lengthText +
+            "。",
+          rule_name: "11 点轻开叫",
+        };
+      }
+      return {
+        bid: "1" + suitSymbol(lightSuit),
+        explanation: hcp + " HCP，轻开叫 " + SUIT_NAMES[lightSuit] + "。牌型：" + lengthText + "。",
+        rule_name: "11 点轻开叫",
+      };
+    }
+  }
   if (settings.weak_two_enabled) {
-    if (hcp >= 5 && hcp <= 11) {
-      if (lengths.S === 6) {
-        return { bid: "2♠", explanation: "弱二开叫。牌型：" + lengthText + "。", rule_name: "弱二开叫" };
-      }
-      if (lengths.H === 6) {
-        return { bid: "2♥", explanation: "弱二开叫。牌型：" + lengthText + "。", rule_name: "弱二开叫" };
-      }
-      if (lengths.D === 6) {
-        return { bid: "2♦", explanation: "弱二开叫。牌型：" + lengthText + "。", rule_name: "弱二开叫" };
+    if (hcp >= 6 && hcp <= 10) {
+      const candidates = ["S", "H", "D"].filter(function (suit) {
+        return lengths[suit] >= 6;
+      });
+      if (candidates.length) {
+        const honors = evaluation.top_honors_by_suit || {};
+        const suit = candidates.slice().sort(function (a, b) {
+          const ha = honors[a] || 0;
+          const hb = honors[b] || 0;
+          if (hb !== ha) {
+            return hb - ha;
+          }
+          if (lengths[b] !== lengths[a]) {
+            return lengths[b] - lengths[a];
+          }
+          const rank = { S: 2, H: 1, D: 0 };
+          return rank[b] - rank[a];
+        })[0];
+        const sixCardSuits = ["S", "H", "D", "C"].filter(function (s) {
+          return lengths[s] === 6;
+        });
+        if (sixCardSuits.length >= 2) {
+          return {
+            bid: "2" + suitSymbol(suit),
+            explanation:
+              hcp +
+              " HCP，6-6 双套，按套质量开叫二阶 " +
+              SUIT_NAMES[suit] +
+              "。牌型：" +
+              lengthText +
+              "。",
+            rule_name: "6-6 双套弱二",
+          };
+        }
+        return {
+          bid: "2" + suitSymbol(suit),
+          explanation: "弱二开叫。牌型：" + lengthText + "。",
+          rule_name: "弱二开叫",
+        };
       }
     }
   }
@@ -129,6 +311,27 @@ function buildOpeningQuestion(seed, settings) {
   const evaluation = evaluate_hand(hand);
   const vulnerability = chooseVulnerability(seed);
   const recommendation = recommendOpening(evaluation, settings);
+  const acceptable = [recommendation.bid];
+  if (recommendation.rule_name === "11 点轻开叫") {
+    const bid = recommendation.bid;
+    let primary = null;
+    if (bid === "1♠") primary = "S";
+    else if (bid === "1♥") primary = "H";
+    else if (bid === "1♦") primary = "D";
+    else if (bid === "1♣") primary = "C";
+    if (primary) {
+      const secondary = elevenHcpSecondaryOpeningBid(evaluation.lengths, primary);
+      if (secondary && acceptable.indexOf(secondary) < 0) {
+        acceptable.push(secondary);
+      }
+    }
+  }
+  if (recommendation.bid === "1NT" && /均型 1NT$/.test(recommendation.rule_name)) {
+    const secondary = oneNtSecondaryMajorOpeningBid(evaluation.lengths);
+    if (secondary && acceptable.indexOf(secondary) < 0) {
+      acceptable.push(secondary);
+    }
+  }
   return {
     hand: hand,
     evaluation: evaluation,
@@ -136,7 +339,7 @@ function buildOpeningQuestion(seed, settings) {
     vulnerability: vulnerability,
     choices: OPENING_BIDS,
     legal_choices: OPENING_BIDS,
-    acceptable_bids: [recommendation.bid],
+    acceptable_bids: acceptable,
     mode: "开叫训练",
     position: "南",
     auction: "第一家开叫",

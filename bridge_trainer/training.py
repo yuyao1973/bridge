@@ -12,14 +12,17 @@ from .bidding import (
     BidRecommendation,
     RuleSettings,
     default_rule_settings,
+    eleven_hcp_secondary_opening_bid,
     legal_response_bids,
     legal_rebid_bids,
     legal_responder_rebid_bids,
+    one_nt_secondary_major_opening_bid,
     parse_contract_bid,
     recommend_opening,
     recommend_opener_rebid,
     recommend_responder_rebid,
     recommend_response,
+    symbol_to_suit,
 )
 from .cards import Hand, deal, new_deck, sort_hand
 from .evaluator import HandEvaluation, evaluate_hand
@@ -355,6 +358,23 @@ def _build_opening_question(seed: int, settings: RuleSettings) -> TrainingQuesti
     evaluation = evaluate_hand(hand)
     vulnerability = choose_vulnerability(seed)
     recommendation = recommend_opening(evaluation, settings, vulnerability)
+    acceptable = build_acceptable_bids(
+        recommendation.bid,
+        OPENING_BIDS,
+        mode="opening",
+    )
+    if recommendation.rule_name == "11 点轻开叫":
+        contract = parse_contract_bid(recommendation.bid)
+        if contract is not None:
+            primary = symbol_to_suit(contract[1])
+            if primary is not None:
+                secondary = eleven_hcp_secondary_opening_bid(evaluation.lengths, primary)
+                if secondary and secondary not in acceptable:
+                    acceptable.append(secondary)
+    if recommendation.bid == "1NT" and recommendation.rule_name.endswith("均型 1NT"):
+        secondary = one_nt_secondary_major_opening_bid(evaluation.lengths)
+        if secondary and secondary not in acceptable:
+            acceptable.append(secondary)
     return TrainingQuestion(
         hand=hand,
         evaluation=evaluation,
@@ -362,11 +382,7 @@ def _build_opening_question(seed: int, settings: RuleSettings) -> TrainingQuesti
         vulnerability=vulnerability,
         choices=OPENING_BIDS,
         legal_choices=OPENING_BIDS,
-        acceptable_bids=build_acceptable_bids(
-            recommendation.bid,
-            OPENING_BIDS,
-            mode="opening",
-        ),
+        acceptable_bids=acceptable,
         mode="开叫训练",
     )
 

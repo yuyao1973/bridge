@@ -1,7 +1,9 @@
 const { loadSettings, saveSettings, resetSettings } = require('../../utils/settings')
+const { onHoverEnter, onHoverLeave } = require('../../utils/hover')
 
 Page({
   data: {
+    hoverKey: '',
     settings: {},
     oneNtRanges: ['14-16', '15-17', '16-18'],
     oneNtIndex: 1,
@@ -28,6 +30,9 @@ Page({
     aggressivenessOptions: [-1, 0, 1],
     aggressivenessIndex: 1
   },
+
+  onHoverEnter,
+  onHoverLeave,
 
   onLoad() {
     this.load()

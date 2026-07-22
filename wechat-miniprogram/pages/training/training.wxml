@@ -1,9 +1,7 @@
 <view class="container">
   <view class="card top-card">
     <view class="mode-title">{{modeText}}</view>
-    <view class="subtitle">已答 {{total}} 题，正确 {{correct}} 题，正确率 {{rate}}%</view>
-    <view class="build-meta practical-profile {{practicalProfileUpdated ? 'updated' : ''}}">实战参数 {{practicalProfile}}</view>
-    <view class="build-meta">版本 {{appVersion}} · 构建时间 {{buildTime}}</view>
+    <view class="stats-line">已答 {{total}} 题，正确 {{correct}} 题，正确率 {{rate}}%</view>
   </view>
 
   <view wx:if="{{mode !== 'opening'}}" class="card">
@@ -68,16 +66,16 @@
       <view class="bid-grid {{bidGridClass}}">
         <block wx:for="{{bidItems}}" wx:key="bid">
           <view class="bid-cell">
-            <view wx:if="{{item.legal}}" class="bid-btn {{item.strainClass}} {{selectedBid === item.bid ? 'selected' : ''}} {{submitted ? 'locked' : ''}}" data-bid="{{item.bid}}" bindtap="selectBid">{{item.bid}}</view>
+            <view wx:if="{{item.legal}}" class="bid-btn {{item.strainClass}} {{selectedBid === item.bid ? 'selected' : ''}} {{submitted ? 'locked' : ''}} {{hoverKey === item.bid ? 'is-hover' : ''}}" hover-class="bid-btn-hover" hover-start-time="0" hover-stay-time="100" data-bid="{{item.bid}}" data-hover="{{item.bid}}" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="selectBid">{{item.bid}}</view>
             <view wx:else class="bid-disabled {{item.strainClass}}">✕ {{item.bid}}</view>
           </view>
         </block>
       </view>
       <view class="subtitle">当前选择：{{selectedBid}}</view>
-      <button class="primary-btn" disabled="{{submitted || !selectedBidLegal}}" bindtap="submitAnswer">提交答案</button>
-      <button class="secondary-btn" bindtap="loadQuestion">下一题</button>
-      <button class="secondary-btn" bindtap="showScoreStats">统计分数</button>
-      <button class="secondary-btn" bindtap="clearScoreStats">清空统计</button>
+      <view class="primary-btn {{hoverKey === 'submit' ? 'is-hover' : ''}} {{submitted || !selectedBidLegal ? 'is-disabled' : ''}}" hover-class="primary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="submit" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="submitAnswer">提交答案</view>
+      <view class="secondary-btn {{hoverKey === 'next' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="next" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="loadQuestion">下一题</view>
+      <view class="secondary-btn {{hoverKey === 'stats' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="stats" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="showScoreStats">统计分数</view>
+      <view class="secondary-btn {{hoverKey === 'clear' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="clear" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="clearScoreStats">清空统计</view>
     </view>
 
     <view wx:if="{{submitted}}" class="card feedback {{answer.correct ? 'ok' : 'bad'}}">
@@ -90,6 +88,6 @@
 
   <view wx:if="{{error}}" class="card error-card">
     <view>{{error}}</view>
-    <button class="secondary-btn" bindtap="loadQuestion">重试</button>
+    <view class="secondary-btn {{hoverKey === 'retry' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="retry" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="loadQuestion">重试</view>
   </view>
 </view>

@@ -1,4 +1,5 @@
 const { loadSettings } = require('../../utils/settings')
+const { onHoverEnter, onHoverLeave } = require('../../utils/hover')
 
 function getApi() {
   return require('../../utils/api')
@@ -46,6 +47,7 @@ function legalRebidBidsForResponse(responseBid) {
 
 Page({
   data: {
+    hoverKey: '',
     mode: 'opening',
     modeText: '开叫训练',
     openerCategoryOptions: OPENER_CATEGORY_OPTIONS,
@@ -66,10 +68,6 @@ Page({
     feedbackTitle: '',
     loading: false,
     error: '',
-    appVersion: '--',
-    buildTime: '--',
-    practicalProfile: '--',
-    practicalProfileUpdated: false,
     total: 0,
     correct: 0,
     rate: '0.0',
@@ -77,6 +75,9 @@ Page({
     allCorrect: 0,
     allRate: '0.0'
   },
+
+  onHoverEnter,
+  onHoverLeave,
 
   onLoad(options) {
     const mode = ['opening', 'response', 'opener_rebid', 'responder_rebid'].indexOf(options.mode) >= 0 ? options.mode : 'opening'
@@ -106,12 +107,10 @@ Page({
       allCorrect: stats.correct,
       allRate
     })
-    this.refreshPracticalProfile()
     this.loadQuestion()
   },
 
   onShow() {
-    this.refreshPracticalProfile(true)
     // Do not auto-reload questions here: onLoad already loads once,
     // and re-entering would re-trigger heavy search on WeChat.
   },
@@ -150,8 +149,6 @@ Page({
         auctionBids,
         bidGridClass: this.getBidGridClass(bidItems.length),
         selectedBidLegal: question.legal_choices.indexOf('Pass') >= 0,
-        appVersion: question.app_version || '--',
-        buildTime: question.build_time || '--',
         loading: false
       })
     }).catch((error) => {
@@ -160,35 +157,6 @@ Page({
       }
       this.setData({ loading: false, error: `出题失败：${error.message || error.errMsg || error}` })
     })
-  },
-
-  getPracticalProfileText() {
-    const settings = loadSettings()
-    const mode = settings.scoring_mode || 'IMP'
-    const vulnText = settings.respect_vulnerability ? '考虑局况' : '不按局况调整'
-    const agg = Number(settings.game_aggressiveness || 0)
-    const aggText = `激进度 ${agg >= 0 ? '+' : ''}${agg}`
-    return `${mode} | ${vulnText} | ${aggText}`
-  },
-
-  refreshPracticalProfile(notifyIfChanged = false) {
-    const profile = this.getPracticalProfileText()
-    const changed = this.data.practicalProfile !== '--' && this.data.practicalProfile !== profile
-    this.setData({
-      practicalProfile: profile,
-      practicalProfileUpdated: notifyIfChanged && changed
-    })
-
-    if (notifyIfChanged && changed) {
-      wx.showToast({
-        title: '实战参数已更新',
-        icon: 'none',
-        duration: 1200
-      })
-      setTimeout(() => {
-        this.setData({ practicalProfileUpdated: false })
-      }, 1400)
-    }
   },
 
   getStoredStats() {

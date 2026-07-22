@@ -1,20 +1,29 @@
 <view class="container">
   <view class="card hero">
     <view class="title">♠ 桥牌 2/1 叫牌训练</view>
-    <view class="subtitle">默认离线运行：出题与判题均在本地完成，无需启动 API、无需云开发。</view>
+    <view class="hero-meta {{practicalProfileUpdated ? 'updated' : ''}}">实战参数 {{practicalProfile}}</view>
+    <view class="hero-meta">版本 {{appVersion}} · 构建时间 {{buildTime}}</view>
   </view>
 
   <view class="card">
-    <button class="primary-btn" bindtap="startOpening">开叫训练</button>
-    <button class="secondary-btn" bindtap="startResponse">应叫训练</button>
-    <button class="secondary-btn" bindtap="startOpenerRebid">开叫者再叫训练</button>
-    <button class="secondary-btn" bindtap="startResponderRebid">应叫者第二次应叫训练</button>
-    <button class="secondary-btn" bindtap="openSettings">叫牌规则设置</button>
-    <button class="danger-btn" bindtap="exitAppWithCleanup">退出并清缓存</button>
+    <view class="primary-btn {{hoverKey === 'opening' ? 'is-hover' : ''}}" hover-class="primary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="opening" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="startOpening">开叫训练</view>
+    <view class="secondary-btn {{hoverKey === 'response' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="response" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="startResponse">应叫训练</view>
+    <view class="secondary-btn {{hoverKey === 'opener_rebid' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="opener_rebid" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="startOpenerRebid">开叫者再叫训练</view>
+    <view class="secondary-btn {{hoverKey === 'responder_rebid' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="responder_rebid" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="startResponderRebid">应叫者第二次应叫训练</view>
+    <view class="secondary-btn {{hoverKey === 'settings' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="settings" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="openSettings">叫牌规则设置</view>
+    <view class="danger-btn {{hoverKey === 'exit' ? 'is-hover' : ''}}" hover-class="danger-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="exit" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="exitAppWithCleanup">退出并清缓存</view>
   </view>
 
   <view class="card">
     <view class="section-title">使用说明</view>
-    <view class="subtitle">直接点上方按钮开始训练即可。若编译/控制台出现 500 或无反应，请用纯英文路径导入项目（例如 C:\source_code\bridge\wechat-miniprogram），并使用测试号 AppID。</view>
+    <view class="subtitle">这是一个桥牌 2/1 Game Force 叫牌训练器，随机发牌、计算牌力与牌型、推荐叫品，并解释原因。</view>
+    <view class="subtitle help-list">
+      <view>• 开叫训练：练习第一家开叫，根据手牌选择正确开叫。</view>
+      <view>• 应叫训练：同伴已开叫后，练习你的第一次应叫。</view>
+      <view>• 开叫者再叫训练：开叫并听到同伴应叫后，练习开叫方的再叫。</view>
+      <view>• 应叫者第二次应叫训练：在开叫-应叫-再叫之后，练习应叫方的第二次应叫。</view>
+      <view>• 叫牌规则设置：调整开叫点力、无将范围、弱二等约定参数。</view>
+      <view>• 退出并清缓存：清除本机规则设置与答题统计后退出小程序。</view>
+    </view>
   </view>
 </view>

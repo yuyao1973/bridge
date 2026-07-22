@@ -201,6 +201,16 @@ def recommend_opening(
         )
 
     if evaluation.balanced and settings.one_nt_min <= hcp <= settings.one_nt_max:
+        secondary = one_nt_secondary_major_opening_bid(lengths)
+        if secondary is not None:
+            return BidRecommendation(
+                "1NT",
+                (
+                    f"{hcp} HCP 且均型，优先开叫 1NT；"
+                    f"持有 5 张高花时，开叫 {secondary} 为次优。牌型：{length_text}。"
+                ),
+                f"{settings.one_nt_min}-{settings.one_nt_max} 均型 1NT",
+            )
         return BidRecommendation(
             "1NT",
             f"{hcp} HCP 且均型，符合当前设置的 {settings.one_nt_min}-{settings.one_nt_max} 均型 1NT 开叫。牌型：{length_text}。",
@@ -223,6 +233,26 @@ def recommend_opening(
             "低花开叫",
         )
 
+    # 11 HCP 轻开叫：6+ 长套且有单缺，或 5-5 以上双套。
+    if hcp == 11:
+        light_suit = choose_eleven_hcp_opening(lengths)
+        if light_suit is not None:
+            secondary = eleven_hcp_secondary_opening_bid(lengths, light_suit)
+            if secondary is not None:
+                return BidRecommendation(
+                    f"1{suit_symbol(light_suit)}",
+                    (
+                        f"{hcp} HCP，双套轻开叫优先开较短高花 1{suit_symbol(light_suit)}；"
+                        f"开叫较长低花 {secondary} 为次优。牌型：{length_text}。"
+                    ),
+                    "11 点轻开叫",
+                )
+            return BidRecommendation(
+                f"1{suit_symbol(light_suit)}",
+                f"{hcp} HCP，符合轻开叫条件，开叫 1{suit_symbol(light_suit)}。牌型：{length_text}。",
+                "11 点轻开叫",
+            )
+
     preempt = choose_preempt_opening(lengths, hcp) if settings.weak_two_enabled else None
     if preempt is not None:
         return BidRecommendation(
@@ -231,8 +261,22 @@ def recommend_opening(
             "阻击开叫",
         )
 
-    weak_two = choose_weak_two(lengths, hcp) if settings.weak_two_enabled else None
+    weak_two = (
+        choose_weak_two(lengths, hcp, evaluation.top_honors_by_suit)
+        if settings.weak_two_enabled
+        else None
+    )
     if weak_two is not None:
+        six_card_suits = [suit for suit in ["S", "H", "D", "C"] if lengths[suit] == 6]
+        if len(six_card_suits) >= 2:
+            return BidRecommendation(
+                f"2{suit_symbol(weak_two)}",
+                (
+                    f"{hcp} HCP，6-6 双套，按套质量开叫二阶 {SUIT_NAMES[weak_two]}。"
+                    f"当前训练不使用弱 2♣。牌型：{length_text}。"
+                ),
+                "6-6 双套弱二",
+            )
         return BidRecommendation(
             f"2{suit_symbol(weak_two)}",
             f"{hcp} HCP，持有 6 张 {SUIT_NAMES[weak_two]}，可作二阶弱二开叫。当前训练不使用弱 2♣。牌型：{length_text}。",
@@ -1729,6 +1773,77 @@ def choose_major_opening(lengths: dict[str, int]) -> str:
     return "H"
 
 
+def one_nt_secondary_major_opening_bid(lengths: dict[str, int]) -> str | None:
+    """均型 1NT 开叫时，若有 5 张高花，一阶高花为次优。"""
+    if lengths["S"] < 5 and lengths["H"] < 5:
+        return None
+    return f"1{suit_symbol(choose_major_opening(lengths))}"
+
+
+def has_singleton_or_void(lengths: dict[str, int]) -> bool:
+    return min(lengths.values()) <= 1
+
+
+def choose_eleven_hcp_long_suit_with_shortage(lengths: dict[str, int]) -> str | None:
+    """11 HCP：6+ 长套且有单缺/缺门时，开叫该长套（一阶）。"""
+    if not has_singleton_or_void(lengths):
+        return None
+    long_suits = [suit for suit in ["S", "H", "D", "C"] if lengths[suit] >= 6]
+    if not long_suits:
+        return None
+    return max(long_suits, key=lambda suit: (lengths[suit], suit == "S", suit == "H", suit == "D"))
+
+
+def choose_eleven_hcp_two_suiter(lengths: dict[str, int]) -> str | None:
+    """11 HCP：5-5 以上双套。
+
+    - 等长：开较高花色（♠>♥>♦>♣）
+    - 否则：开较长花色
+    - 若高花套短于低花套：次优开较短高花
+    """
+    five_plus = [suit for suit in ["S", "H", "D", "C"] if lengths[suit] >= 5]
+    if len(five_plus) < 2:
+        return None
+
+    suit_rank = {"S": 4, "H": 3, "D": 2, "C": 1}
+    majors = [suit for suit in five_plus if suit in {"S", "H"}]
+    minors = [suit for suit in five_plus if suit in {"D", "C"}]
+
+    if majors and minors:
+        max_minor_len = max(lengths[suit] for suit in minors)
+        short_majors = [suit for suit in majors if lengths[suit] < max_minor_len]
+        if short_majors:
+            # 较短高花；同长时取较高花色
+            return min(short_majors, key=lambda suit: (lengths[suit], -suit_rank[suit]))
+
+    # 较长优先；等长时较高花色
+    return max(five_plus, key=lambda suit: (lengths[suit], suit_rank[suit]))
+
+
+def eleven_hcp_secondary_opening_bid(lengths: dict[str, int], primary_suit: str) -> str | None:
+    """高花短于低花时，较长低花为一阶开叫次优。"""
+    if primary_suit not in {"S", "H"}:
+        return None
+    five_plus = [suit for suit in ["S", "H", "D", "C"] if lengths[suit] >= 5]
+    if len(five_plus) < 2:
+        return None
+    minors = [suit for suit in five_plus if suit in {"D", "C"}]
+    if not minors:
+        return None
+    longer_minor = max(minors, key=lambda suit: (lengths[suit], suit == "D", suit == "C"))
+    if lengths[primary_suit] < lengths[longer_minor]:
+        return f"1{suit_symbol(longer_minor)}"
+    return None
+
+
+def choose_eleven_hcp_opening(lengths: dict[str, int]) -> str | None:
+    # 双套优先走规则 7，否则 6+ 单缺走规则 6。
+    two_suiter = choose_eleven_hcp_two_suiter(lengths)
+    if two_suiter is not None:
+        return two_suiter
+    return choose_eleven_hcp_long_suit_with_shortage(lengths)
+
+
 def choose_minor_opening(lengths: dict[str, int]) -> str:
     clubs = lengths["C"]
     diamonds = lengths["D"]
@@ -1741,13 +1856,22 @@ def choose_minor_opening(lengths: dict[str, int]) -> str:
     return "D"
 
 
-def choose_weak_two(lengths: dict[str, int], hcp: int) -> str | None:
+def choose_weak_two(
+    lengths: dict[str, int],
+    hcp: int,
+    top_honors_by_suit: dict[str, int] | None = None,
+) -> str | None:
     if not 6 <= hcp <= 10:
         return None
+    # 当前训练不使用弱 2♣；6-6 双套在可开弱二花色中按质量（A/K/Q 张数）选择。
     candidates = [suit for suit in ["S", "H", "D"] if lengths[suit] >= 6]
     if not candidates:
         return None
-    return max(candidates, key=lambda suit: (lengths[suit], suit == "S", suit == "H"))
+    honors = top_honors_by_suit or {}
+    return max(
+        candidates,
+        key=lambda suit: (honors.get(suit, 0), lengths[suit], suit == "S", suit == "H"),
+    )
 
 
 def choose_preempt_opening(lengths: dict[str, int], hcp: int) -> str | None:

@@ -583,7 +583,8 @@ def bid_style_class(bid: str) -> str:
 def render_bid_picker(question: TrainingQuestion) -> None:
     st.write("请选择叫品")
     legal_choices = getattr(question, "legal_choices", question.choices)
-    cols_per_row = 6
+    # 5 列更宽，避免手机端按钮文字被挤扁/截断（含 3NT 等）
+    cols_per_row = 5
     for start in range(0, len(question.choices), cols_per_row):
         cols = st.columns(cols_per_row)
         for index, bid in enumerate(question.choices[start : start + cols_per_row]):

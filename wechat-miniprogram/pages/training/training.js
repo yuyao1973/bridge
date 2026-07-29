@@ -358,6 +358,9 @@ Page({
   },
 
   getBidGridClass(count) {
+    if (count >= 28) {
+      return 'cols-7'
+    }
     if (count >= 17) {
       return 'cols-6'
     }

@@ -141,31 +141,38 @@
 }
 
 .bid-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8rpx;
-  align-items: stretch;
+  width: 100%;
   margin-top: 8rpx;
+  box-sizing: border-box;
 }
 
 .bid-card {
   padding: 20rpx;
+  overflow: visible;
 }
 
 .bid-cell {
   box-sizing: border-box;
+  min-width: 0;
+  width: auto;
 }
 
-.bid-grid.cols-4 .bid-cell {
-  width: 23.8%;
+.bid-grid.cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.bid-grid.cols-5 .bid-cell {
-  width: 18.9%;
+.bid-grid.cols-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-.bid-grid.cols-6 .bid-cell {
-  width: 15.7%;
+.bid-grid.cols-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.bid-grid.cols-7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .bid-btn,
@@ -176,13 +183,23 @@
   box-sizing: border-box;
   width: 100%;
   min-height: 52rpx;
-  padding: 0;
+  padding: 0 2rpx;
   margin: 0;
   border-radius: 10rpx;
   text-align: center;
   font-weight: 700;
   font-size: 22rpx;
+  line-height: 1.2;
   white-space: nowrap;
+  overflow: visible;
+}
+
+.bid-grid.cols-6 .bid-btn,
+.bid-grid.cols-6 .bid-disabled,
+.bid-grid.cols-7 .bid-btn,
+.bid-grid.cols-7 .bid-disabled {
+  font-size: 20rpx;
+  min-height: 48rpx;
 }
 
 .bid-btn::after {
@@ -227,6 +244,12 @@
 
 .bid-disabled {
   opacity: 0.7;
+}
+
+.bid-illegal-mark {
+  margin-right: 2rpx;
+  color: #b42318;
+  font-size: 0.9em;
 }
 
 .bid-club {

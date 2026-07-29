@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "v0.2.1-offline";
+const APP_VERSION = "v0.2.2-offline";
 
 function pad2(n) {
   return n < 10 ? "0" + n : String(n);

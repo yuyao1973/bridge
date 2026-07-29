@@ -67,7 +67,7 @@
         <block wx:for="{{bidItems}}" wx:key="bid">
           <view class="bid-cell">
             <view wx:if="{{item.legal}}" class="bid-btn {{item.strainClass}} {{selectedBid === item.bid ? 'selected' : ''}} {{submitted ? 'locked' : ''}} {{hoverKey === item.bid ? 'is-hover' : ''}}" hover-class="bid-btn-hover" hover-start-time="0" hover-stay-time="100" data-bid="{{item.bid}}" data-hover="{{item.bid}}" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="selectBid">{{item.bid}}</view>
-            <view wx:else class="bid-disabled {{item.strainClass}}">✕ {{item.bid}}</view>
+            <view wx:else class="bid-disabled {{item.strainClass}}"><text class="bid-illegal-mark">✕</text>{{item.bid}}</view>
           </view>
         </block>
       </view>

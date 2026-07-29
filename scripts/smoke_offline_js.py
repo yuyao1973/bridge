@@ -122,9 +122,21 @@ def main() -> None:
     )
     opening = json.loads(result)
     assert opening["mode"] == "开叫训练", opening
-    assert opening["choices"] == 21, opening
+    assert opening["choices"] == 22, opening
     assert opening["bid"], opening
     assert len(opening["hand_lines"]) == 4, opening
+    opening_choices = json.loads(
+        ctx.eval(
+            """
+            (function() {
+              var api = requireRoot('./api.js');
+              var q = api.createQuestionLocal({ mode: 'opening', seed: 42, settings: {} });
+              return JSON.stringify(q.choices);
+            })()
+            """
+        )
+    )
+    assert "3NT" in opening_choices, opening_choices
     print("opening question:", opening["bid"], "HCP", opening["hcp"])
 
     result = ctx.eval(

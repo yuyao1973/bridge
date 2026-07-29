@@ -75,6 +75,7 @@ def main() -> None:
         "utils/bridge_trainer/opening_lite.js": (BT / "opening_lite.js").read_text(encoding="utf-8"),
         "utils/bridge_trainer/bidding.js": (BT / "bidding.js").read_text(encoding="utf-8"),
         "utils/bridge_trainer/training.js": (BT / "training.js").read_text(encoding="utf-8"),
+        "utils/version.js": (UTILS / "version.js").read_text(encoding="utf-8"),
         "utils/api.js": (UTILS / "api.js").read_text(encoding="utf-8"),
     }
     for module_id, source in modules.items():

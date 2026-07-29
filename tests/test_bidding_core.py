@@ -243,13 +243,163 @@ class ResponseRecommendationTests(unittest.TestCase):
         self.assertEqual(recommend_response("1NT", evaluation(8, 4, 4, 3, 2), vulnerability=VULNERABILITY).bid, "2♣")
 
     def test_response_to_one_nt_games_without_major(self) -> None:
-        self.assertEqual(recommend_response("1NT", evaluation(10, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "3NT")
+        result = recommend_response("1NT", evaluation(10, 3, 3, 4, 3), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3NT")
+        self.assertEqual(result.rule_name, "1NT 后进局")
 
     def test_response_to_one_nt_invites_without_major(self) -> None:
-        self.assertEqual(recommend_response("1NT", evaluation(8, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "2NT")
+        result = recommend_response("1NT", evaluation(8, 3, 3, 4, 3), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2NT")
+        self.assertEqual(result.rule_name, "1NT 后邀局")
 
     def test_response_to_one_nt_passes_without_invite_values(self) -> None:
         self.assertEqual(recommend_response("1NT", evaluation(7, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "Pass")
+
+    def test_response_to_one_nt_quantitative_four_nt(self) -> None:
+        result = recommend_response("1NT", evaluation(16, 3, 3, 4, 3), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4NT")
+        self.assertEqual(result.rule_name, "1NT 后 4NT 邀小满")
+
+    def test_response_to_one_nt_quantitative_five_nt(self) -> None:
+        result = recommend_response("1NT", evaluation(18, 3, 3, 4, 3), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "5NT")
+        self.assertEqual(result.rule_name, "1NT 后 5NT 邀大满")
+
+    def test_response_to_one_nt_minor_transfer_to_clubs(self) -> None:
+        result = recommend_response("1NT", evaluation(6, 2, 2, 3, 6, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♠")
+        self.assertEqual(result.rule_name, "1NT 后低花转移")
+
+    def test_response_to_one_nt_minor_transfer_to_diamonds_starts_with_two_spade(self) -> None:
+        # 方块单套也先叫 2♠，避免 2NT 与邀局歧义；后续 1NT-2♠-3♣-3♦。
+        result = recommend_response("1NT", evaluation(6, 2, 2, 6, 3, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♠")
+        self.assertEqual(result.rule_name, "1NT 后低花转移")
+
+    def test_response_to_one_nt_eight_hcp_six_minor_invites_not_transfer(self) -> None:
+        # 8-10 非极不均型：即使 6 张低花也优先 3m 邀 3NT，不走转移。
+        result = recommend_response("1NT", evaluation(8, 2, 2, 6, 3, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♦")
+        self.assertEqual(result.rule_name, "1NT 后低花邀局")
+
+    def test_response_to_one_nt_eight_hcp_very_unbalanced_still_transfers(self) -> None:
+        result = recommend_response("1NT", evaluation(8, 0, 2, 7, 4, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♠")
+        self.assertEqual(result.rule_name, "1NT 后低花转移")
+
+    def test_response_to_one_nt_game_values_balanced_six_minor_bids_three_nt(self) -> None:
+        # >10 较均型：直接 3NT，不走低花转移。
+        result = recommend_response("1NT", evaluation(11, 3, 2, 2, 6, balanced=True), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3NT")
+        self.assertEqual(result.rule_name, "1NT 后进局")
+
+    def test_response_to_one_nt_strong_unbalanced_six_minor_transfers(self) -> None:
+        result = recommend_response("1NT", evaluation(11, 1, 2, 3, 7, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♠")
+        self.assertEqual(result.rule_name, "1NT 后低花转移")
+
+    def test_responder_rebid_after_minor_transfer_shows_diamonds(self) -> None:
+        hand = evaluation(6, 2, 2, 6, 3, balanced=False)
+        result = recommend_responder_rebid("1NT", "2♠", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♦")
+        self.assertEqual(result.rule_name, "低花转移后改叫方块")
+
+    def test_responder_rebid_after_minor_transfer_passes_with_clubs(self) -> None:
+        hand = evaluation(6, 2, 2, 3, 6, balanced=False)
+        result = recommend_responder_rebid("1NT", "2♠", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "低花转移后止叫")
+
+    def test_responder_rebid_after_minor_transfer_medium_still_corrects_diamonds(self) -> None:
+        # 极不均型 8-10 可先转移；再叫仍先改叫方块。
+        hand = evaluation(9, 0, 2, 7, 4, balanced=False)
+        result = recommend_responder_rebid("1NT", "2♠", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♦")
+        self.assertEqual(result.rule_name, "低花转移后改叫方块")
+
+    def test_responder_rebid_after_minor_transfer_invites_with_clubs(self) -> None:
+        hand = evaluation(11, 2, 2, 3, 6, balanced=False)
+        result = recommend_responder_rebid("1NT", "2♠", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♣")
+        self.assertEqual(result.rule_name, "低花转移后邀局")
+
+    def test_responder_rebid_after_minor_transfer_invites_with_diamonds(self) -> None:
+        hand = evaluation(12, 2, 2, 6, 3, balanced=False)
+        result = recommend_responder_rebid("1NT", "2♠", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♦")
+        self.assertEqual(result.rule_name, "低花转移后邀局")
+
+    def test_responder_rebid_after_minor_transfer_games_in_three_nt(self) -> None:
+        hand = evaluation(13, 3, 3, 1, 6, balanced=True)
+        result = recommend_responder_rebid("1NT", "2♠", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3NT")
+        self.assertEqual(result.rule_name, "低花转移后进局")
+
+    def test_responder_rebid_after_minor_transfer_games_in_five_diamond(self) -> None:
+        hand = evaluation(14, 2, 1, 7, 3, balanced=False)
+        result = recommend_responder_rebid("1NT", "2♠", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "5♦")
+        self.assertEqual(result.rule_name, "低花转移后进局")
+
+    def test_responder_rebid_after_minor_transfer_cuebids_short_major(self) -> None:
+        hand = evaluation(16, 1, 3, 3, 6, balanced=False)
+        result = recommend_responder_rebid("1NT", "2♠", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♠")
+        self.assertEqual(result.rule_name, "低花转移后扣叫试探满贯")
+
+    def test_responder_rebid_after_minor_transfer_asks_aces_with_four_nt(self) -> None:
+        hand = evaluation(17, 2, 2, 3, 6, balanced=False)
+        result = recommend_responder_rebid("1NT", "2♠", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4NT")
+        self.assertEqual(result.rule_name, "低花转移后 4NT 问叫")
+
+    def test_response_to_one_nt_minor_invite_three_diamond(self) -> None:
+        result = recommend_response("1NT", evaluation(8, 3, 2, 5, 3, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♦")
+        self.assertEqual(result.rule_name, "1NT 后低花邀局")
+
+    def test_response_to_one_nt_minor_invite_three_club(self) -> None:
+        result = recommend_response("1NT", evaluation(9, 2, 3, 3, 5, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♣")
+        self.assertEqual(result.rule_name, "1NT 后低花邀局")
+
+    def test_response_to_one_nt_slam_interest_three_heart(self) -> None:
+        result = recommend_response("1NT", evaluation(15, 2, 5, 3, 3, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♥")
+        self.assertEqual(result.rule_name, "1NT 后红心满贯兴趣")
+
+    def test_response_to_one_nt_slam_interest_three_spade(self) -> None:
+        result = recommend_response("1NT", evaluation(16, 5, 2, 3, 3, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♠")
+        self.assertEqual(result.rule_name, "1NT 后黑桃满贯兴趣")
+
+    def test_response_to_one_nt_texas_heart_transfer(self) -> None:
+        result = recommend_response("1NT", evaluation(10, 2, 6, 3, 2, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♦")
+        self.assertEqual(result.rule_name, "1NT 后德克萨斯红心转移")
+
+    def test_response_to_one_nt_texas_spade_transfer(self) -> None:
+        result = recommend_response("1NT", evaluation(11, 6, 2, 3, 2, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "1NT 后德克萨斯黑桃转移")
+
+    def test_response_to_one_nt_texas_prefers_over_slam_interest_jump(self) -> None:
+        # 6+ 高花且够局时优先德克萨斯，而不是 3M 满贯兴趣。
+        result = recommend_response("1NT", evaluation(15, 2, 6, 3, 2, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♦")
+        self.assertEqual(result.rule_name, "1NT 后德克萨斯红心转移")
+
+    def test_opener_accepts_club_transfer_after_one_nt(self) -> None:
+        hand = evaluation(16, 3, 3, 3, 4, balanced=True)
+        result = recommend_opener_rebid("1NT", "2♠", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♣")
+        self.assertEqual(result.rule_name, "接受低花转移")
+
+    def test_opener_accepts_texas_heart_transfer_after_one_nt(self) -> None:
+        hand = evaluation(16, 3, 3, 3, 4, balanced=True)
+        result = recommend_opener_rebid("1NT", "4♦", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "接受德克萨斯红心转移")
 
     def test_jacoby_two_nt_after_major_with_game_force_support(self) -> None:
         self.assertEqual(recommend_response("1♥", evaluation(13, 3, 4, 3, 3), vulnerability=VULNERABILITY).bid, "2NT")
@@ -279,7 +429,9 @@ class ResponseRecommendationTests(unittest.TestCase):
         self.assertEqual(recommend_response("1♦", evaluation(11, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "2NT")
 
     def test_minor_opening_with_five_card_support_and_ten_hcp_raises_to_three(self) -> None:
-        self.assertEqual(recommend_response("1♦", evaluation(10, 3, 3, 5, 2, balanced=False), vulnerability=VULNERABILITY).bid, "3♦")
+        result = recommend_response("1♦", evaluation(10, 3, 3, 5, 2, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♦")
+        self.assertEqual(result.rule_name, "低花限制加叫")
 
     def test_minor_opening_without_inverted_minors_ten_hcp_support_raises_to_three(self) -> None:
         settings = RuleSettings(inverted_minors_enabled=False)
@@ -287,6 +439,36 @@ class ResponseRecommendationTests(unittest.TestCase):
             recommend_response("1♦", evaluation(10, 3, 3, 5, 2, balanced=False), settings=settings, vulnerability=VULNERABILITY).bid,
             "3♦",
         )
+
+    def test_minor_opening_without_inverted_simple_raise(self) -> None:
+        settings = RuleSettings(inverted_minors_enabled=False)
+        result = recommend_response("1♣", evaluation(8, 3, 2, 3, 5, balanced=False), settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♣")
+        self.assertEqual(result.rule_name, "低花简单加叫")
+
+    def test_minor_opening_without_inverted_invite_raise_to_four(self) -> None:
+        settings = RuleSettings(inverted_minors_enabled=False)
+        result = recommend_response("1♦", evaluation(14, 2, 3, 5, 3, balanced=False), settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♦")
+        self.assertEqual(result.rule_name, "低花邀局加叫")
+
+    def test_minor_opening_without_inverted_direct_game_to_five(self) -> None:
+        settings = RuleSettings(inverted_minors_enabled=False)
+        result = recommend_response("1♣", evaluation(17, 2, 2, 3, 6, balanced=False), settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "5♣")
+        self.assertEqual(result.rule_name, "低花直接进局")
+
+    def test_minor_opening_without_inverted_slam_try_four_nt(self) -> None:
+        settings = RuleSettings(inverted_minors_enabled=False)
+        result = recommend_response("1♦", evaluation(20, 2, 2, 6, 3, balanced=False), settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4NT")
+        self.assertEqual(result.rule_name, "低花满贯试探 4NT")
+
+    def test_minor_opening_prefers_raise_over_nt_when_unbalanced_with_support(self) -> None:
+        settings = RuleSettings(inverted_minors_enabled=False)
+        result = recommend_response("1♣", evaluation(13, 3, 2, 3, 5, balanced=False), settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♣")
+        self.assertNotEqual(result.bid, "3NT")
 
     def test_minor_opening_with_inverted_minors_ten_hcp_support_uses_two_minor(self) -> None:
         settings = RuleSettings(inverted_minors_enabled=True)
@@ -900,11 +1082,88 @@ class RebidRecommendationTests(unittest.TestCase):
         self.assertEqual(result.rule_name, "低花反加叫后 3NT")
 
     def test_inverted_minor_rebid_not_triggered_when_disabled(self) -> None:
-        # 反加叫关闭时，1♣-2♣ 应当走简单加叫后的普通再叫逻辑，不触发反加叫分支
+        # 反加叫关闭时，1♣-2♣ 且 ≤16 HCP 应止叫 Pass
         settings = RuleSettings(inverted_minors_enabled=False)
         hand = evaluation(15, 3, 3, 2, 5, balanced=False, top_honors_by_suit={"S": 1, "H": 1, "D": 1, "C": 2})
         result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
-        self.assertNotEqual(result.rule_name, "低花反加叫后 2NT")
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "普通低花加叫后止叫")
+
+    def test_non_inverted_minor_raise_rebids_major_with_extra_values(self) -> None:
+        settings = RuleSettings(inverted_minors_enabled=False)
+        hand = evaluation(18, 5, 2, 2, 4, balanced=False)
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♠")
+        self.assertEqual(result.rule_name, "普通低花加叫后再叫高花")
+
+    def test_non_inverted_minor_raise_balanced_eighteen_bids_two_nt(self) -> None:
+        settings = RuleSettings(inverted_minors_enabled=False)
+        hand = evaluation(18, 3, 3, 3, 4, balanced=True)
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2NT")
+        self.assertEqual(result.rule_name, "普通低花加叫后 2NT")
+
+    def test_non_inverted_minor_raise_balanced_twenty_bids_three_nt(self) -> None:
+        settings = RuleSettings(inverted_minors_enabled=False)
+        hand = evaluation(20, 3, 3, 3, 4, balanced=True)
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3NT")
+        self.assertEqual(result.rule_name, "普通低花加叫后 3NT")
+
+    def test_non_inverted_minor_raise_unbalanced_invite_rebids_three_minor(self) -> None:
+        settings = RuleSettings(inverted_minors_enabled=False)
+        hand = evaluation(18, 2, 3, 3, 5, balanced=False)
+        result = recommend_opener_rebid("1♣", "2♣", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♣")
+        self.assertEqual(result.rule_name, "普通低花加叫后邀局")
+
+    def test_major_one_nt_rebid_six_card_major(self) -> None:
+        hand = evaluation(13, 2, 6, 3, 2, balanced=False)
+        result = recommend_opener_rebid("1♥", "1NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♥")
+        self.assertEqual(result.rule_name, "1M-1NT 后重复高花")
+
+    def test_major_one_nt_rebid_shows_three_plus_minor(self) -> None:
+        hand = evaluation(13, 2, 5, 3, 3, balanced=True)
+        result = recommend_opener_rebid("1♥", "1NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♣")
+        self.assertEqual(result.rule_name, "1M-1NT 后再叫低花")
+
+    def test_major_one_nt_rebid_balanced_seventeen_bids_two_nt(self) -> None:
+        hand = evaluation(17, 3, 5, 3, 2, balanced=True)
+        result = recommend_opener_rebid("1♥", "1NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2NT")
+        self.assertEqual(result.rule_name, "1M-1NT 后 2NT")
+
+    def test_major_one_nt_rebid_balanced_nineteen_bids_three_nt(self) -> None:
+        hand = evaluation(19, 3, 5, 3, 2, balanced=True)
+        result = recommend_opener_rebid("1♥", "1NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3NT")
+        self.assertEqual(result.rule_name, "1M-1NT 后 3NT")
+
+    def test_spade_one_nt_rebid_shows_four_hearts(self) -> None:
+        hand = evaluation(13, 5, 4, 2, 2, balanced=False)
+        result = recommend_opener_rebid("1♠", "1NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♥")
+        self.assertEqual(result.rule_name, "1♠-1NT 后再叫红心")
+
+    def test_spade_one_nt_rebid_six_spades_prefers_repeat_over_hearts(self) -> None:
+        hand = evaluation(13, 6, 4, 2, 1, balanced=False)
+        result = recommend_opener_rebid("1♠", "1NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♠")
+        self.assertEqual(result.rule_name, "1M-1NT 后重复高花")
+
+    def test_opener_rebid_shortage_in_response_suit_allows_one_nt(self) -> None:
+        hand = evaluation(13, 3, 1, 5, 4, balanced=False)
+        result = recommend_opener_rebid("1♦", "1♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "1NT")
+        self.assertEqual(result.rule_name, "一阶序列低限再叫 1NT")
+
+    def test_opener_rebid_five_card_minor_jump_rebids_with_extra_values(self) -> None:
+        hand = evaluation(16, 3, 2, 5, 3, balanced=False)
+        result = recommend_opener_rebid("1♦", "1♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♦")
+        self.assertEqual(result.rule_name, "重复开叫花色")
 
     def test_inverted_minor_rebid_high_hcp_not_limited_fallback(self) -> None:
         # 1♣-2♣，20 HCP，3-4-1-5，按约定应进入 4NT 关键张问叫

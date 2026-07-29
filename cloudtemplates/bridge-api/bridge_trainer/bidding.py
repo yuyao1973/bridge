@@ -46,10 +46,14 @@ RESPONSE_BIDS = [
     "3♥",
     "3♠",
     "3NT",
+    "4♣",
+    "4♦",
     "4♥",
     "4♠",
+    "4NT",
     "5♣",
     "5♦",
+    "5NT",
 ]
 
 REBID_BIDS = [
@@ -535,6 +539,16 @@ def recommend_opener_rebid(
         if response_bid == "2♥" and settings.transfers_enabled and is_legal_response_bid(response_bid, "2♠"):
             return BidRecommendation("2♠", f"1NT-2♥ 序列中，2♥ 为黑桃转移，开叫者应接受转移叫 2♠。牌型：{length_text}。", "接受黑桃转移")
 
+        # 低花转移：1NT-2♠ 要求同伴转叫 3♣（草花直接完成；方块后续再叫 3♦）。
+        if response_bid == "2♠" and settings.transfers_enabled and is_legal_response_bid(response_bid, "3♣"):
+            return BidRecommendation("3♣", f"1NT-2♠ 序列中，2♠ 为低花转移，开叫者应先转叫 3♣。牌型：{length_text}。", "接受低花转移")
+
+        # 德克萨斯转移：1NT-4♦/4♥，开叫者完成转移到 4♥/4♠。
+        if response_bid == "4♦" and settings.transfers_enabled and is_legal_response_bid(response_bid, "4♥"):
+            return BidRecommendation("4♥", f"1NT-4♦ 序列中，4♦ 为德克萨斯红心转移，开叫者应接受转移叫 4♥。牌型：{length_text}。", "接受德克萨斯红心转移")
+        if response_bid == "4♥" and settings.transfers_enabled and is_legal_response_bid(response_bid, "4♠"):
+            return BidRecommendation("4♠", f"1NT-4♥ 序列中，4♥ 为德克萨斯黑桃转移，开叫者应接受转移叫 4♠。牌型：{length_text}。", "接受德克萨斯黑桃转移")
+
         if response_bid == "2NT":
             accept_invite_hcp = max(16, 17 + game_adjustment)
             if hcp >= accept_invite_hcp and is_legal_response_bid(response_bid, "3NT"):
@@ -634,8 +648,53 @@ def recommend_opener_rebid(
                 "Bergen 后支持开叫高花",
             )
 
-    # 一阶开叫后同伴 1NT 应叫，最低限均型通常以止叫为主。
-    if opening_level == 1 and response_bid == "1NT" and evaluation.balanced and hcp <= 14:
+    # 开叫 1M 后同伴 1NT：按牌力/牌型再叫。
+    # 2♣/2♦ 保证 3 张；2M 需 6+；2NT=17-18 均型；3NT=19-21 均型。
+    if opening_bid in {"1♥", "1♠"} and response_bid == "1NT" and opener_suit in {"H", "S"}:
+        if evaluation.balanced and 19 <= hcp <= 21 and is_legal_response_bid(response_bid, "3NT"):
+            return BidRecommendation(
+                "3NT",
+                f"1{opening_strain}-1NT 后，你有 {hcp} HCP 且均型，叫 3NT。牌型：{length_text}。",
+                "1M-1NT 后 3NT",
+            )
+        if evaluation.balanced and 17 <= hcp <= 18 and is_legal_response_bid(response_bid, "2NT"):
+            return BidRecommendation(
+                "2NT",
+                f"1{opening_strain}-1NT 后，你有 {hcp} HCP 且均型，叫 2NT。牌型：{length_text}。",
+                "1M-1NT 后 2NT",
+            )
+        if lengths[opener_suit] >= 6:
+            rebid_major = f"2{opening_strain}"
+            if is_legal_response_bid(response_bid, rebid_major):
+                return BidRecommendation(
+                    rebid_major,
+                    f"1{opening_strain}-1NT 后，你有 {lengths[opener_suit]} 张开叫高花，再叫 {rebid_major}。牌型：{length_text}。",
+                    "1M-1NT 后重复高花",
+                )
+        # 1♠-1NT：有 4 张♥ 时再叫 2♥。
+        if opening_bid == "1♠" and lengths["H"] >= 4 and is_legal_response_bid(response_bid, "2♥"):
+            return BidRecommendation(
+                "2♥",
+                f"1♠-1NT 后，你有 {lengths['H']} 张红心，再叫 2♥。牌型：{length_text}。",
+                "1♠-1NT 后再叫红心",
+            )
+        minor_for_rebid = choose_minor_for_major_one_nt_rebid(lengths)
+        if minor_for_rebid is not None:
+            minor_bid = f"2{suit_symbol(minor_for_rebid)}"
+            if is_legal_response_bid(response_bid, minor_bid):
+                return BidRecommendation(
+                    minor_bid,
+                    f"1{opening_strain}-1NT 后，你有 {lengths[minor_for_rebid]} 张 {SUIT_NAMES[minor_for_rebid]}（保证 3 张），再叫 {minor_bid}。牌型：{length_text}。",
+                    "1M-1NT 后再叫低花",
+                )
+        return BidRecommendation(
+            "Pass",
+            f"1{opening_strain}-1NT 后，你有 {hcp} HCP，当前没有更合适的描述叫品，建议 Pass。牌型：{length_text}。",
+            "1M-1NT 后止叫",
+        )
+
+    # 一阶低花开叫后同伴 1NT 应叫，最低限均型通常以止叫为主。
+    if opening_bid in {"1♣", "1♦"} and response_bid == "1NT" and evaluation.balanced and hcp <= 14:
         return BidRecommendation(
             "Pass",
             f"同伴 1NT 应叫后，你有 {hcp} HCP 且均型，属于最低限，通常止叫 Pass。牌型：{length_text}。",
@@ -673,6 +732,57 @@ def recommend_opener_rebid(
                 f"同伴简单加叫到 {response_bid}，你有 {hcp} HCP 属于中等强度，叫 {invite_bid} 表示继续邀请。牌型：{length_text}。",
                 "简单加叫后邀请",
             )
+
+    # 低花反加叫未开启时的 1m-2m：按牌力选择 Pass / 2M / 2NT / 3NT / 3m。
+    if (
+        not settings.inverted_minors_enabled
+        and opening_level == 1
+        and opening_strain in {"♣", "♦"}
+        and response_contract is not None
+        and response_contract[0] == 2
+        and response_contract[1] == opening_strain
+    ):
+        if hcp <= 16:
+            return BidRecommendation(
+                "Pass",
+                f"同伴加叫到 {response_bid}（未启用低花反加叫），你有 {hcp} HCP（≤16），建议止叫 Pass。牌型：{length_text}。",
+                "普通低花加叫后止叫",
+            )
+        if hcp >= 20 and evaluation.balanced and is_legal_response_bid(response_bid, "3NT"):
+            return BidRecommendation(
+                "3NT",
+                f"同伴加叫到 {response_bid}（未启用低花反加叫），你有 {hcp} HCP 且均型，叫 3NT。牌型：{length_text}。",
+                "普通低花加叫后 3NT",
+            )
+        five_plus_majors = [suit for suit in ["S", "H"] if lengths[suit] >= 5]
+        if hcp >= 18 and five_plus_majors:
+            major = max(five_plus_majors, key=lambda suit: (lengths[suit], suit == "S"))
+            major_bid = f"2{suit_symbol(major)}"
+            if is_legal_response_bid(response_bid, major_bid):
+                return BidRecommendation(
+                    major_bid,
+                    f"同伴加叫到 {response_bid}（未启用低花反加叫），你有 {hcp} HCP 且 {lengths[major]} 张 {SUIT_NAMES[major]}，再叫 {major_bid}。牌型：{length_text}。",
+                    "普通低花加叫后再叫高花",
+                )
+        if evaluation.balanced and 18 <= hcp <= 19 and is_legal_response_bid(response_bid, "2NT"):
+            return BidRecommendation(
+                "2NT",
+                f"同伴加叫到 {response_bid}（未启用低花反加叫），你有 {hcp} HCP 且均型，叫 2NT。牌型：{length_text}。",
+                "普通低花加叫后 2NT",
+            )
+        if 18 <= hcp <= 19:
+            invite_minor = f"3{opening_strain}"
+            if is_legal_response_bid(response_bid, invite_minor):
+                return BidRecommendation(
+                    invite_minor,
+                    f"同伴加叫到 {response_bid}（未启用低花反加叫），你有 {hcp} HCP，叫 {invite_minor} 邀局。牌型：{length_text}。",
+                    "普通低花加叫后邀局",
+                )
+        return BidRecommendation(
+            "Pass",
+            f"同伴加叫到 {response_bid}（未启用低花反加叫），你有 {hcp} HCP，当前没有更合适的继续叫品，建议 Pass。牌型：{length_text}。",
+            "普通低花加叫后止叫",
+        )
 
     # 低花反加叫后再叫：1♣-2♣ 或 1♦-2♦（启用时，应叫方 10+ HCP 逼叫一轮）
     # 再叫优先级：3NT(18-19均型) > 3M Splinter(18-21短高花) > 2M报单缺(15-17)
@@ -825,23 +935,59 @@ def recommend_opener_rebid(
                 "最低限均型再叫 1NT",
             )
 
-    # 一阶开叫-一阶应叫后，若没有可叫的一阶第二套，通常优先再叫 1NT 描述低限牌力。
+    # 一阶开叫-一阶应叫后：
+    # - 优先保留可叫的一阶第二套（如 1♣-1♥-1♠）
+    # - 均型低限，或非均型且单缺同伴应叫花色，可再叫 1NT
     opener_length = lengths[opener_suit] if opener_suit is not None else 0
     has_singleton_or_void = min(lengths.values()) <= 1
-    if (
-        opening_level == 1
-        and response_level == 1
-        and 12 <= hcp <= 14
-        and opener_length <= 5
-        and not has_singleton_or_void
-        and is_legal_response_bid(response_bid, "1NT")
-    ):
+    shortage_in_response_suit = (
+        response_suit in {"H", "S"} and lengths[response_suit] <= 1
+    )
+    if opening_level == 1 and response_level == 1:
         one_level_second_suit = choose_one_level_second_suit(lengths, opener_suit, response_suit, response_bid)
-        if one_level_second_suit is None:
+        if one_level_second_suit is not None:
+            one_level_bid = minimum_legal_bid_for_suit(one_level_second_suit, response_bid, minimum_level=1)
+            if one_level_bid is not None:
+                return BidRecommendation(
+                    one_level_bid,
+                    f"你开叫 {opening_bid} 后还有 4 张以上第二套 {SUIT_NAMES[one_level_second_suit]}，再叫新花 {one_level_bid} 描述牌型。牌型：{length_text}。",
+                    "再叫第二套",
+                )
+        if (
+            12 <= hcp <= 14
+            and opener_length <= 5
+            and (not has_singleton_or_void or shortage_in_response_suit)
+            and is_legal_response_bid(response_bid, "1NT")
+        ):
+            reason = (
+                "牌型单缺同伴应叫花色"
+                if shortage_in_response_suit and not evaluation.balanced
+                else "牌型无单缺且开叫套不超过 5 张"
+            )
             return BidRecommendation(
                 "1NT",
-                f"你有 {hcp} HCP，一阶开叫后同伴一阶应叫；牌型无单缺且开叫套不超过 5 张，当前没有可叫的一阶第二套，优先再叫 1NT 表示低限并控制叫牌高度。牌型：{length_text}。",
+                f"你有 {hcp} HCP，一阶开叫后同伴一阶应叫；{reason}，当前没有可叫的一阶第二套，优先再叫 1NT 表示低限并控制叫牌高度。牌型：{length_text}。",
                 "一阶序列低限再叫 1NT",
+            )
+
+    # 一阶低花开叫后同伴一阶高花应叫：无支持时，非均型恰好 5 张开叫花色可按点力重复 2/3 阶。
+    # （6+ 长套仍走后方重复/6-5 第二套逻辑。）
+    if (
+        opening_level == 1
+        and opening_strain in {"♣", "♦"}
+        and response_suit in {"H", "S"}
+        and response_level == 1
+        and opener_suit is not None
+        and lengths[opener_suit] == 5
+        and not evaluation.balanced
+    ):
+        rebid_level = 3 if hcp >= 16 else 2
+        rebid_opening = f"{rebid_level}{opening_strain}"
+        if is_legal_response_bid(response_bid, rebid_opening):
+            return BidRecommendation(
+                rebid_opening,
+                f"你开叫 {opening_bid} 后持有 5 张 {SUIT_NAMES[opener_suit]}（非均型），无同伴高花支持，按点力重复开叫花色 {rebid_opening}。牌型：{length_text}。",
+                "重复开叫花色",
             )
 
     reverse_min_hcp = 16
@@ -917,6 +1063,37 @@ def choose_raise_level(response_level: int, hcp: int) -> int:
     if hcp >= 16:
         return max(3, response_level + 1)
     return max(2, response_level + 1)
+
+
+def choose_minor_for_major_one_nt_rebid(lengths: dict[str, int]) -> str | None:
+    """1M-1NT 后再叫低花：保证至少 3 张；等长时优先较便宜的 ♣。"""
+    candidates = [suit for suit in ["C", "D"] if lengths[suit] >= 3]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda suit: (lengths[suit], suit == "C"))
+
+
+def prefers_minor_suit_transfer(
+    hcp: int,
+    lengths: dict[str, int],
+    minor: str,
+    evaluation: HandEvaluation,
+) -> bool:
+    """1NT 后低花转移：6+ 单套，且弱牌或强牌/极不均型倾向低花定约。
+
+    8-10 HCP 除非非常不平均，否则不走转移（改走 3m 邀 3NT 或直接 3NT）。
+    """
+    very_unbalanced = min(lengths.values()) <= 1 or lengths[minor] >= 7
+    if hcp < 7:
+        return True
+    if hcp == 7:
+        return True
+    if 8 <= hcp <= 10:
+        return very_unbalanced
+    # >10：仅强牌且倾向低花定约时转移；较均型优先无将。
+    if evaluation.balanced and not very_unbalanced:
+        return False
+    return very_unbalanced or not evaluation.balanced
 
 
 def choose_second_suit(
@@ -1230,6 +1407,82 @@ def recommend_responder_rebid(
                 "转移后止叫",
             )
 
+        # 低花转移后续：1NT - 2♠ - 3♣
+        # 弱牌(<7)及中等(7-10)：方块单套 → 3♦，草花单套 → Pass
+        # >10 HCP：11-12 邀局 4m；13-15 进局 3NT/5m；16+ 扣叫或 4NT 试探满贯
+        if settings.transfers_enabled and response_bid == "2♠" and opener_rebid_bid == "3♣":
+            diamond_single = lengths["D"] >= 6 and lengths["C"] < 6
+            club_single = lengths["C"] >= 6 and lengths["D"] < 6
+            true_minor = "D" if diamond_single else "C"
+            minor_symbol = suit_symbol(true_minor)
+
+            # README：弱牌(<7) 方块→3♦、草花→Pass；7-10 同样先定位花色；>10 才邀局/进局/满贯。
+            if hcp <= 10:
+                strength_label = "弱牌(<7 HCP)" if hcp < 7 else "中等牌力(7-10 HCP)"
+                if diamond_single and is_legal_response_bid(opener_rebid_bid, "3♦"):
+                    return BidRecommendation(
+                        "3♦",
+                        f"1NT-2♠-3♣ 后，你有 {hcp} HCP（{strength_label}）和 {lengths['D']} 张方块单套，再叫 3♦ 表明真实花色并止叫。牌型：{length_text}。",
+                        "低花转移后改叫方块",
+                    )
+                return BidRecommendation(
+                    "Pass",
+                    f"1NT-2♠-3♣ 后，你有 {hcp} HCP（{strength_label}）和 {lengths['C']} 张草花单套，接受同伴完成转移，建议 Pass。牌型：{length_text}。",
+                    "低花转移后止叫",
+                )
+
+            if hcp >= 16:
+                short_majors = [suit for suit in ["H", "S"] if lengths[suit] <= 1]
+                for suit in short_majors:
+                    cue_bid = f"3{suit_symbol(suit)}"
+                    if is_legal_response_bid(opener_rebid_bid, cue_bid):
+                        return BidRecommendation(
+                            cue_bid,
+                            f"1NT-2♠-3♣ 后，你有 {hcp} HCP 且 {SUIT_NAMES[suit]} 单缺，扣叫 {cue_bid} 试探满贯。牌型：{length_text}。",
+                            "低花转移后扣叫试探满贯",
+                        )
+                if is_legal_response_bid(opener_rebid_bid, "4NT"):
+                    return BidRecommendation(
+                        "4NT",
+                        f"1NT-2♠-3♣ 后，你有 {hcp} HCP 和 {lengths[true_minor]} 张 {SUIT_NAMES[true_minor]}，叫 4NT 问A张试探满贯。牌型：{length_text}。",
+                        "低花转移后 4NT 问叫",
+                    )
+
+            if hcp >= 13:
+                if evaluation.balanced and is_legal_response_bid(opener_rebid_bid, "3NT"):
+                    return BidRecommendation(
+                        "3NT",
+                        f"1NT-2♠-3♣ 后，你有 {hcp} HCP 且均型，直接进局 3NT。牌型：{length_text}。",
+                        "低花转移后进局",
+                    )
+                game_bid = f"5{minor_symbol}"
+                if is_legal_response_bid(opener_rebid_bid, game_bid):
+                    return BidRecommendation(
+                        game_bid,
+                        f"1NT-2♠-3♣ 后，你有 {hcp} HCP 和 {lengths[true_minor]} 张 {SUIT_NAMES[true_minor]}，直接进局 {game_bid}。牌型：{length_text}。",
+                        "低花转移后进局",
+                    )
+
+            invite_bid = f"4{minor_symbol}"
+            if is_legal_response_bid(opener_rebid_bid, invite_bid):
+                return BidRecommendation(
+                    invite_bid,
+                    f"1NT-2♠-3♣ 后，你有 {hcp} HCP 和 {lengths[true_minor]} 张 {SUIT_NAMES[true_minor]}，叫 {invite_bid} 邀局。牌型：{length_text}。",
+                    "低花转移后邀局",
+                )
+
+            if diamond_single and is_legal_response_bid(opener_rebid_bid, "3♦"):
+                return BidRecommendation(
+                    "3♦",
+                    f"1NT-2♠-3♣ 后，你有 {lengths['D']} 张方块单套，再叫 3♦ 表明真实花色。牌型：{length_text}。",
+                    "低花转移后改叫方块",
+                )
+            return BidRecommendation(
+                "Pass",
+                f"1NT-2♠-3♣ 后，你有 {hcp} HCP，当前没有更合适的继续叫品，建议 Pass。牌型：{length_text}。",
+                "低花转移后止叫",
+            )
+
     if opener_rebid_bid in {"1NT", "2NT", "3NT"}:
         if hcp >= nt_game_hcp and is_legal_response_bid(opener_rebid_bid, "3NT"):
             return BidRecommendation(
@@ -1295,6 +1548,37 @@ def recommend_response_to_1nt(
     game_hcp = max(8, 10 + game_adjustment)
     invite_low = max(6, 8 + game_adjustment)
     invite_high = game_hcp - 1
+    # 相对 15-17 1NT：约 16-17 邀小满，18+ 邀大满。
+    slam_invite_low = max(14, 16 + game_adjustment)
+    grand_invite_low = max(16, 18 + game_adjustment)
+
+    # 德克萨斯：6+ 高花且够局，直接转移到四阶成局。
+    if settings.transfers_enabled and lengths["H"] >= 6 and hcp >= game_hcp:
+        return BidRecommendation(
+            "4♦",
+            f"同伴开 1NT，你有 {hcp} HCP 和 {lengths['H']} 张红心，使用德克萨斯转移叫 4♦，要求同伴转叫 4♥。牌型：{length_text}。",
+            "1NT 后德克萨斯红心转移",
+        )
+    if settings.transfers_enabled and lengths["S"] >= 6 and hcp >= game_hcp:
+        return BidRecommendation(
+            "4♥",
+            f"同伴开 1NT，你有 {hcp} HCP 和 {lengths['S']} 张黑桃，使用德克萨斯转移叫 4♥，要求同伴转叫 4♠。牌型：{length_text}。",
+            "1NT 后德克萨斯黑桃转移",
+        )
+
+    # 3♥/3♠：5+ 高花且 15+ HCP，表示满贯兴趣。
+    if lengths["H"] >= 5 and hcp >= 15:
+        return BidRecommendation(
+            "3♥",
+            f"同伴开 1NT，你有 {hcp} HCP 和 {lengths['H']} 张红心，跳叫 3♥ 表示满贯兴趣。牌型：{length_text}。",
+            "1NT 后红心满贯兴趣",
+        )
+    if lengths["S"] >= 5 and hcp >= 15:
+        return BidRecommendation(
+            "3♠",
+            f"同伴开 1NT，你有 {hcp} HCP 和 {lengths['S']} 张黑桃，跳叫 3♠ 表示满贯兴趣。牌型：{length_text}。",
+            "1NT 后黑桃满贯兴趣",
+        )
 
     if settings.transfers_enabled and lengths["H"] >= 5:
         return BidRecommendation(
@@ -1308,11 +1592,98 @@ def recommend_response_to_1nt(
             f"同伴开 1NT，你有 {hcp} HCP 和 5 张以上黑桃。简化规则使用 Jacoby Transfer：叫 2♥，要求同伴转叫 2♠。牌型：{length_text}。",
             "1NT 后黑桃转移",
         )
-    if settings.stayman_enabled and hcp >= 8 and (lengths["H"] >= 4 or lengths["S"] >= 4):
+    if settings.stayman_enabled and hcp >= invite_low and (lengths["H"] >= 4 or lengths["S"] >= 4):
         return BidRecommendation(
             "2♣",
             f"同伴开 1NT，你有 {hcp} HCP 且至少一个 4 张高花。用 2♣ Stayman 寻找 4-4 高花配合。牌型：{length_text}。",
             "Stayman",
+        )
+
+    # 3♣/3♦：5+ 低花、8-9 HCP，邀 3NT（8-10 非极不均型优先此路，不走低花转移）。
+    has_four_card_major = lengths["H"] >= 4 or lengths["S"] >= 4
+    if not has_four_card_major and invite_low <= hcp <= invite_high:
+        five_plus_minors = [suit for suit in ["D", "C"] if lengths[suit] >= 5]
+        if five_plus_minors:
+            # 极不均型 6+ 单套留给低花转移；其余 5+/普通 6 套走邀局。
+            candidates = []
+            for suit in five_plus_minors:
+                if lengths[suit] >= 6 and prefers_minor_suit_transfer(hcp, lengths, suit, evaluation):
+                    continue
+                candidates.append(suit)
+            if candidates:
+                minor = max(candidates, key=lambda suit: (lengths[suit], suit == "D"))
+                minor_bid = f"3{suit_symbol(minor)}"
+                return BidRecommendation(
+                    minor_bid,
+                    f"同伴开 1NT，你有 {hcp} HCP 和 {lengths[minor]} 张 {SUIT_NAMES[minor]}，跳叫 {minor_bid} 邀请 3NT。牌型：{length_text}。",
+                    "1NT 后低花邀局",
+                )
+
+    # 低花转移：单套 6+，弱牌或强牌/极不均型倾向低花定约；统一先叫 2♠。
+    if settings.transfers_enabled and not has_four_card_major:
+        club_single = lengths["C"] >= 6 and lengths["D"] < 6
+        diamond_single = lengths["D"] >= 6 and lengths["C"] < 6
+        if club_single or diamond_single:
+            minor = "C" if club_single else "D"
+            if prefers_minor_suit_transfer(hcp, lengths, minor, evaluation):
+                follow_up = (
+                    "同伴转叫 3♣ 后按点力继续"
+                    if hcp > 10
+                    else ("同伴转叫 3♣ 后止叫" if club_single else "同伴转叫 3♣ 后再叫 3♦")
+                )
+                return BidRecommendation(
+                    "2♠",
+                    f"同伴开 1NT，你有 {hcp} HCP 和 {lengths[minor]} 张 {SUIT_NAMES[minor]} 单套，"
+                    f"弱牌或倾向低花定约，使用低花转移叫 2♠（{follow_up}）。牌型：{length_text}。",
+                    "1NT 后低花转移",
+                )
+
+    # >10 且未走低花转移：无四张高花时优先直接 3NT（见后方均型/兜底档）。
+
+    # 无四张高花的均型牌：按点力 Pass / 2NT / 3NT / 4NT / 5NT。
+    if evaluation.balanced and not has_four_card_major:
+        if hcp >= grand_invite_low:
+            return BidRecommendation(
+                "5NT",
+                f"同伴 1NT 后，你有 {hcp} HCP 且均型无四张高花，叫 5NT 邀请大满贯。牌型：{length_text}。",
+                "1NT 后 5NT 邀大满",
+            )
+        if hcp >= slam_invite_low:
+            return BidRecommendation(
+                "4NT",
+                f"同伴 1NT 后，你有 {hcp} HCP 且均型无四张高花，叫 4NT 邀请小满贯。牌型：{length_text}。",
+                "1NT 后 4NT 邀小满",
+            )
+        if hcp >= game_hcp:
+            return BidRecommendation(
+                "3NT",
+                f"同伴 1NT 表示 15-17 均型，你有 {hcp} HCP 且均型无四张高花，合力够局，直接叫 3NT。牌型：{length_text}。",
+                "1NT 后进局",
+            )
+        if invite_low <= hcp <= invite_high:
+            return BidRecommendation(
+                "2NT",
+                f"同伴 1NT 后，你有 {hcp} HCP 且均型无四张高花，邀请 3NT。牌型：{length_text}。",
+                "1NT 后邀局",
+            )
+        return BidRecommendation(
+            "Pass",
+            f"同伴 1NT 后，你有 {hcp} HCP 且均型无四张高花，通常不足以邀局，建议 Pass。牌型：{length_text}。",
+            "1NT 后止叫",
+        )
+
+    # 非均型兜底：仍按点力落无将档。
+    if hcp >= grand_invite_low:
+        return BidRecommendation(
+            "5NT",
+            f"同伴 1NT 后，你有 {hcp} HCP 且无需要先处理的高花，叫 5NT 邀请大满贯。牌型：{length_text}。",
+            "1NT 后 5NT 邀大满",
+        )
+    if hcp >= slam_invite_low:
+        return BidRecommendation(
+            "4NT",
+            f"同伴 1NT 后，你有 {hcp} HCP 且无需要先处理的高花，叫 4NT 邀请小满贯。牌型：{length_text}。",
+            "1NT 后 4NT 邀小满",
         )
     if hcp >= game_hcp:
         return BidRecommendation(
@@ -1617,6 +1988,7 @@ def recommend_response_to_minor(
         )
 
     minor_honors = evaluation.top_honors_by_suit.get(minor, 0)
+    # README：无高花时，非均型通常以 5+ 张低花支持加叫。
     has_minor_support = lengths[minor] >= 5 or (lengths[minor] == 4 and minor_honors >= 2)
 
     if not evaluation.balanced and has_minor_support:
@@ -1633,6 +2005,7 @@ def recommend_response_to_minor(
                 "低花反加叫（逼叫）",
             )
 
+        # 未启用低花反加叫：按点力选择 2m / 3m / 4m / 5m / 4NT。
         if 6 <= hcp <= 9:
             return BidRecommendation(
                 f"2{minor_bid}",
@@ -1644,6 +2017,24 @@ def recommend_response_to_minor(
                 f"3{minor_bid}",
                 f"同伴开 1{minor_bid}，你有 {hcp} HCP 和低花支持，作限制性加叫 3{minor_bid}。牌型：{length_text}。",
                 "低花限制加叫",
+            )
+        if 13 <= hcp <= 15:
+            return BidRecommendation(
+                f"4{minor_bid}",
+                f"同伴开 1{minor_bid}，你有 {hcp} HCP 和低花支持，作邀局加叫 4{minor_bid}。牌型：{length_text}。",
+                "低花邀局加叫",
+            )
+        if 16 <= hcp <= 18:
+            return BidRecommendation(
+                f"5{minor_bid}",
+                f"同伴开 1{minor_bid}，你有 {hcp} HCP 和低花支持，直接进局 5{minor_bid}。牌型：{length_text}。",
+                "低花直接进局",
+            )
+        if hcp >= 19:
+            return BidRecommendation(
+                "4NT",
+                f"同伴开 1{minor_bid}，你有 {hcp} HCP 和低花支持，以开叫低花为将牌作 4NT 关键张问叫试探满贯。牌型：{length_text}。",
+                "低花满贯试探 4NT",
             )
 
     if evaluation.balanced and hcp >= nt_game_hcp:

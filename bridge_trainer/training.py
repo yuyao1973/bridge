@@ -11,8 +11,10 @@ from .bidding import (
     RESPONDER_REBID_BIDS,
     BidRecommendation,
     RuleSettings,
+    choose_gambling_3nt_minor,
     default_rule_settings,
     eleven_hcp_secondary_opening_bid,
+    has_suit_stopper,
     legal_response_bids,
     legal_rebid_bids,
     legal_responder_rebid_bids,
@@ -30,7 +32,7 @@ from .evaluator import HandEvaluation, evaluate_hand
 
 ONE_LEVEL_OPENINGS = {"1♣", "1♦", "1♥", "1♠", "1NT"}
 STRONG_OPENINGS = {"2♣", "2NT"}
-PREEMPT_OPENINGS = {"2♦", "2♥", "2♠", "3♣", "3♦", "3♥", "3♠", "4♣", "4♦", "4♥", "4♠", "5♣", "5♦"}
+PREEMPT_OPENINGS = {"2♦", "2♥", "2♠", "3♣", "3♦", "3♥", "3♠", "3NT", "4♣", "4♦", "4♥", "4♠", "5♣", "5♦"}
 SUPPORTED_FILTER_OPENINGS = ONE_LEVEL_OPENINGS | STRONG_OPENINGS | PREEMPT_OPENINGS
 DEFAULT_SEARCH_ATTEMPTS = 2_000
 OPENING_FILTER_SEARCH_ATTEMPTS = 5_000
@@ -54,6 +56,10 @@ DIRECTED_OPENER_REBID_SEQUENCES: set[tuple[str, str]] = {
     ("2NT", "3♥"),
     ("1♥", "2NT"),
     ("1♠", "2NT"),
+    ("3NT", "4♣"),
+    ("3NT", "4♦"),
+    ("3NT", "4♥"),
+    ("3NT", "4♠"),
 }
 
 DIRECTED_RESPONDER_REBID_SEQUENCES: set[tuple[str, str, str]] = {
@@ -64,6 +70,12 @@ DIRECTED_RESPONDER_REBID_SEQUENCES: set[tuple[str, str, str]] = {
     ("1NT", "2♥", "2♠"),
     ("1♥", "2NT", "4♥"),
     ("1♠", "2NT", "4♠"),
+    ("3NT", "4♣", "Pass"),
+    ("3NT", "4♣", "4♦"),
+    ("3NT", "4♦", "4♥"),
+    ("3NT", "4♦", "4♠"),
+    ("3NT", "4♦", "5♣"),
+    ("3NT", "4♦", "5♦"),
 }
 
 
@@ -126,6 +138,21 @@ def matches_common_opener_rebid_prefilter(
     if opener_bid == "1♠" and response_bid == "2NT":
         return settings.jacoby_2nt_enabled and opener_lengths["S"] >= 5 and responder_lengths["S"] >= 4 and responder_evaluation.hcp >= 12
 
+    if opener_bid == "3NT":
+        gambling_minor = choose_gambling_3nt_minor(opener_evaluation, settings.opening_min_hcp)
+        if gambling_minor is None:
+            return False
+        six_plus_majors = responder_lengths["H"] >= 6 or responder_lengths["S"] >= 6
+        both_stopped = has_suit_stopper(responder_evaluation, "H") and has_suit_stopper(responder_evaluation, "S")
+        if response_bid == "4♣":
+            return not six_plus_majors and not both_stopped
+        if response_bid == "4♦":
+            return not six_plus_majors and both_stopped and responder_evaluation.hcp >= 16
+        if response_bid == "4♥":
+            return responder_lengths["H"] >= 6 and responder_lengths["H"] >= responder_lengths["S"]
+        if response_bid == "4♠":
+            return responder_lengths["S"] >= 6 and responder_lengths["S"] > responder_lengths["H"]
+
     return True
 
 
@@ -179,6 +206,52 @@ def matches_common_responder_rebid_prefilter(
         if not (settings.jacoby_2nt_enabled and opener_lengths["S"] >= 5 and responder_lengths["S"] >= 4 and responder_evaluation.hcp >= 12):
             return False
         return opener_rebid_bid != "4♠" or opener_lengths["S"] >= 5
+
+    if opener_bid == "3NT":
+        gambling_minor = choose_gambling_3nt_minor(opener_evaluation, settings.opening_min_hcp)
+        if gambling_minor is None:
+            return False
+        six_plus_majors = responder_lengths["H"] >= 6 or responder_lengths["S"] >= 6
+        both_stopped = has_suit_stopper(responder_evaluation, "H") and has_suit_stopper(responder_evaluation, "S")
+        if response_bid == "4♣":
+            if six_plus_majors or both_stopped:
+                return False
+            if opener_rebid_bid == "Pass":
+                return gambling_minor == "C"
+            if opener_rebid_bid == "4♦":
+                return gambling_minor == "D"
+            return True
+        if response_bid == "4♦":
+            if six_plus_majors or not both_stopped or responder_evaluation.hcp < 16:
+                return False
+            if opener_rebid_bid in {"4♥", "4♠"}:
+                suit = "H" if opener_rebid_bid == "4♥" else "S"
+                return opener_lengths[suit] <= 1
+            if opener_rebid_bid == "5♣":
+                return (
+                    gambling_minor == "D"
+                    and opener_lengths["C"] <= 1
+                    and opener_lengths["H"] > 1
+                    and opener_lengths["S"] > 1
+                ) or (
+                    gambling_minor == "C"
+                    and opener_lengths["H"] > 1
+                    and opener_lengths["S"] > 1
+                    and opener_lengths["D"] > 1
+                )
+            if opener_rebid_bid == "5♦":
+                return (
+                    gambling_minor == "C"
+                    and opener_lengths["D"] <= 1
+                    and opener_lengths["H"] > 1
+                    and opener_lengths["S"] > 1
+                ) or (
+                    gambling_minor == "D"
+                    and opener_lengths["H"] > 1
+                    and opener_lengths["S"] > 1
+                    and opener_lengths["C"] > 1
+                )
+            return True
 
     return True
 
@@ -313,6 +386,67 @@ def get_sequence_constraints(
         ev = evaluate_hand(hand)
         return ev.hcp >= 12 and ev.lengths["S"] >= 4
 
+    def gambling_3nt_opener(hand: Hand) -> bool:
+        return choose_gambling_3nt_minor(evaluate_hand(hand), settings.opening_min_hcp) is not None
+
+    def gambling_3nt_clubs_opener(hand: Hand) -> bool:
+        return choose_gambling_3nt_minor(evaluate_hand(hand), settings.opening_min_hcp) == "C"
+
+    def gambling_3nt_diamonds_opener(hand: Hand) -> bool:
+        return choose_gambling_3nt_minor(evaluate_hand(hand), settings.opening_min_hcp) == "D"
+
+    def gambling_escape_responder(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        if ev.lengths["H"] >= 6 or ev.lengths["S"] >= 6:
+            return False
+        return not (has_suit_stopper(ev, "H") and has_suit_stopper(ev, "S"))
+
+    def gambling_ask_responder(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        if ev.lengths["H"] >= 6 or ev.lengths["S"] >= 6:
+            return False
+        return ev.hcp >= 16 and has_suit_stopper(ev, "H") and has_suit_stopper(ev, "S")
+
+    def gambling_hearts_game_responder(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.lengths["H"] >= 6 and ev.lengths["H"] >= ev.lengths["S"]
+
+    def gambling_spades_game_responder(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return ev.lengths["S"] >= 6 and ev.lengths["S"] > ev.lengths["H"]
+
+    def gambling_short_hearts_opener(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return choose_gambling_3nt_minor(ev, settings.opening_min_hcp) is not None and ev.lengths["H"] <= 1
+
+    def gambling_short_spades_opener(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        return choose_gambling_3nt_minor(ev, settings.opening_min_hcp) is not None and ev.lengths["S"] <= 1
+
+    def gambling_five_club_after_ask_opener(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        minor = choose_gambling_3nt_minor(ev, settings.opening_min_hcp)
+        if minor == "D" and ev.lengths["C"] <= 1 and ev.lengths["H"] > 1 and ev.lengths["S"] > 1:
+            return True
+        return (
+            minor == "C"
+            and ev.lengths["H"] > 1
+            and ev.lengths["S"] > 1
+            and ev.lengths["D"] > 1
+        )
+
+    def gambling_five_diamond_after_ask_opener(hand: Hand) -> bool:
+        ev = evaluate_hand(hand)
+        minor = choose_gambling_3nt_minor(ev, settings.opening_min_hcp)
+        if minor == "C" and ev.lengths["D"] <= 1 and ev.lengths["H"] > 1 and ev.lengths["S"] > 1:
+            return True
+        return (
+            minor == "D"
+            and ev.lengths["H"] > 1
+            and ev.lengths["S"] > 1
+            and ev.lengths["C"] > 1
+        )
+
     if opener_rebid_bid is None:
         # 2-bid sequences: opener rebid training
         if opener_bid == "1NT" and response_bid == "2\u2663":
@@ -331,6 +465,14 @@ def get_sequence_constraints(
             return hearts5_opener, jacoby_hearts_responder
         if opener_bid == "1\u2660" and response_bid == "2NT" and settings.jacoby_2nt_enabled:
             return spades5_opener, jacoby_spades_responder
+        if opener_bid == "3NT" and response_bid == "4\u2663":
+            return gambling_3nt_opener, gambling_escape_responder
+        if opener_bid == "3NT" and response_bid == "4\u2666":
+            return gambling_3nt_opener, gambling_ask_responder
+        if opener_bid == "3NT" and response_bid == "4\u2665":
+            return gambling_3nt_opener, gambling_hearts_game_responder
+        if opener_bid == "3NT" and response_bid == "4\u2660":
+            return gambling_3nt_opener, gambling_spades_game_responder
     else:
         # 3-bid sequences: responder rebid training
         if opener_bid == "1NT" and response_bid == "2\u2663":
@@ -348,6 +490,20 @@ def get_sequence_constraints(
             return hearts5_opener, jacoby_hearts_responder
         if opener_bid == "1\u2660" and response_bid == "2NT" and settings.jacoby_2nt_enabled:
             return spades5_opener, jacoby_spades_responder
+        if opener_bid == "3NT" and response_bid == "4\u2663":
+            if opener_rebid_bid == "Pass":
+                return gambling_3nt_clubs_opener, gambling_escape_responder
+            if opener_rebid_bid == "4\u2666":
+                return gambling_3nt_diamonds_opener, gambling_escape_responder
+        if opener_bid == "3NT" and response_bid == "4\u2666":
+            if opener_rebid_bid == "4\u2665":
+                return gambling_short_hearts_opener, gambling_ask_responder
+            if opener_rebid_bid == "4\u2660":
+                return gambling_short_spades_opener, gambling_ask_responder
+            if opener_rebid_bid == "5\u2663":
+                return gambling_five_club_after_ask_opener, gambling_ask_responder
+            if opener_rebid_bid == "5\u2666":
+                return gambling_five_diamond_after_ask_opener, gambling_ask_responder
 
     return None
 

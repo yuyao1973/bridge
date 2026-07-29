@@ -21,6 +21,7 @@ const OPENING_BIDS = [
   "3♦",
   "3♥",
   "3♠",
+  "3NT",
   "4♣",
   "4♦",
   "4♥",
@@ -312,6 +313,16 @@ function recommend_opening(evaluation, settings, vulnerability) {
     }
   }
 
+  // 拼搏式 3NT：7+ 坚固低花（含 AKQ），边张无 A/K/Q；优先于同档阻击叫。
+  const gambling_minor = choose_gambling_3nt_minor(evaluation, settings.opening_min_hcp);
+  if (gambling_minor !== null) {
+    return bidRecommendation(
+      "3NT",
+      `${hcp} HCP，持有 ${lengths[gambling_minor]} 张坚固 ${SUIT_NAMES[gambling_minor]}（含 AKQ），边张无大牌，开叫拼搏式 3NT。牌型：${length_text}。`,
+      "拼搏式 3NT",
+    );
+  }
+
   const preempt = settings.weak_two_enabled ? choose_preempt_opening(lengths, hcp) : null;
   if (preempt !== null) {
     return bidRecommendation(
@@ -385,6 +396,10 @@ function recommend_response(opener_bid, evaluation, settings, vulnerability, ove
 
   if (opener_bid === "2NT") {
     return recommend_response_to_2nt(evaluation, settings, vulnerability);
+  }
+
+  if (opener_bid === "3NT") {
+    return recommend_response_to_gambling_3nt(evaluation, settings);
   }
 
   if (
@@ -781,6 +796,75 @@ function recommend_opener_rebid(opening_bid, response_bid, evaluation, settings,
         "2NT 后接受黑桃转移",
       );
     }
+  }
+
+  // 拼搏式 3NT 后再叫：4♣=Pass or correct；4♦=问单缺；4M=止叫。
+  if (opening_bid === "3NT") {
+    let gambling_minor = choose_gambling_3nt_minor(evaluation, settings.opening_min_hcp);
+    if (gambling_minor === null) {
+      gambling_minor = lengths.C >= lengths.D ? "C" : "D";
+    }
+    const minor_symbol = suit_symbol(gambling_minor);
+    if (response_bid === "4♣") {
+      if (gambling_minor === "C") {
+        return bidRecommendation(
+          "Pass",
+          `拼搏式 3NT 后同伴叫 4♣（Pass or correct），你的真实花色是梅花，接受并止叫 Pass。牌型：${length_text}。`,
+          "拼搏式 3NT 后接受梅花",
+        );
+      }
+      if (is_legal_response_bid(response_bid, "4♦")) {
+        return bidRecommendation(
+          "4♦",
+          `拼搏式 3NT 后同伴叫 4♣（Pass or correct），你的真实花色是方块，改叫 4♦。牌型：${length_text}。`,
+          "拼搏式 3NT 后改叫方块",
+        );
+      }
+    }
+    if (response_bid === "4♦") {
+      const short_majors = ["H", "S"].filter((suit) => lengths[suit] <= 1);
+      for (const suit of short_majors) {
+        const shortage_bid = `4${suit_symbol(suit)}`;
+        if (is_legal_response_bid(response_bid, shortage_bid)) {
+          return bidRecommendation(
+            shortage_bid,
+            `拼搏式 3NT 后同伴以 4♦ 询问单缺，你在 ${SUIT_NAMES[suit]} 单缺，回答 ${shortage_bid}。牌型：${length_text}。`,
+            "拼搏式 3NT 后报单缺",
+          );
+        }
+      }
+      const other_minor = gambling_minor === "C" ? "D" : "C";
+      if (lengths[other_minor] <= 1) {
+        const other_bid = `5${suit_symbol(other_minor)}`;
+        if (is_legal_response_bid(response_bid, other_bid)) {
+          return bidRecommendation(
+            other_bid,
+            `拼搏式 3NT 后同伴以 4♦ 询问单缺，你在 ${SUIT_NAMES[other_minor]} 单缺，回答 ${other_bid}。牌型：${length_text}。`,
+            "拼搏式 3NT 后报单缺",
+          );
+        }
+      }
+      const own_five = `5${minor_symbol}`;
+      if (is_legal_response_bid(response_bid, own_five)) {
+        return bidRecommendation(
+          own_five,
+          `拼搏式 3NT 后同伴以 4♦ 询问单缺，你无高花单缺，重叫己方坚固低花 ${own_five}。牌型：${length_text}。`,
+          "拼搏式 3NT 后无单缺重叫低花",
+        );
+      }
+    }
+    if (["4♥", "4♠"].includes(response_bid)) {
+      return bidRecommendation(
+        "Pass",
+        `拼搏式 3NT 后同伴叫 ${response_bid} 表示自有高花成局，开叫者止叫 Pass。牌型：${length_text}。`,
+        "拼搏式 3NT 后高花止叫",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `拼搏式 3NT 后同伴叫 ${response_bid}，当前简化体系以止叫为主，建议 Pass。牌型：${length_text}。`,
+      "拼搏式 3NT 后止叫",
+    );
   }
 
   if (["1♥", "1♠"].includes(opening_bid) && response_bid === "2NT") {
@@ -1415,6 +1499,78 @@ function recommend_responder_rebid(opening_bid, response_bid, opener_rebid_bid, 
   const lengths = evaluation.lengths;
   const length_text = describe_lengths(evaluation);
 
+  // 拼搏式 3NT 后应叫者第二次应叫（含开叫者 Pass；须先于合约解析兜底）。
+  if (opening_bid === "3NT") {
+    // Pass 后再叫时，以应叫花色作为合法性参照（Pass 本身无法抬级）。
+    const legality_prev = opener_rebid_bid === "Pass" ? response_bid : opener_rebid_bid;
+    if (response_bid === "4♣" && opener_rebid_bid === "Pass") {
+      if (hcp >= 16 && is_legal_response_bid(legality_prev, "5♣")) {
+        return bidRecommendation(
+          "5♣",
+          `拼搏式 3NT-4♣ 后开叫者 Pass 确认梅花，你有 ${hcp} HCP，加叫到 5♣。牌型：${length_text}。`,
+          "拼搏式 3NT 后进低花局",
+        );
+      }
+      return bidRecommendation(
+        "Pass",
+        `拼搏式 3NT-4♣ 后开叫者 Pass 确认梅花，当前牌力以止叫为主，建议 Pass。你有 ${hcp} HCP，牌型：${length_text}。`,
+        "拼搏式 3NT 后止叫",
+      );
+    }
+    if (response_bid === "4♣" && opener_rebid_bid === "4♦") {
+      if (hcp >= 16 && is_legal_response_bid(opener_rebid_bid, "5♦")) {
+        return bidRecommendation(
+          "5♦",
+          `拼搏式 3NT-4♣-4♦ 后确认方块，你有 ${hcp} HCP，加叫到 5♦。牌型：${length_text}。`,
+          "拼搏式 3NT 后进低花局",
+        );
+      }
+      return bidRecommendation(
+        "Pass",
+        `拼搏式 3NT-4♣-4♦ 后确认方块，当前牌力以止叫为主，建议 Pass。你有 ${hcp} HCP，牌型：${length_text}。`,
+        "拼搏式 3NT 后止叫",
+      );
+    }
+    if (response_bid === "4♦") {
+      if (["4♥", "4♠", "5♣", "5♦"].includes(opener_rebid_bid)) {
+        if (hcp >= 18 && ["5♣", "5♦"].includes(opener_rebid_bid)) {
+          const slam = `6${opener_rebid_bid[1]}`;
+          if (is_legal_response_bid(opener_rebid_bid, slam)) {
+            return bidRecommendation(
+              slam,
+              `拼搏式 3NT-4♦-${opener_rebid_bid} 后，你有 ${hcp} HCP，尝试低花小满贯 ${slam}。牌型：${length_text}。`,
+              "拼搏式 3NT 后试探满贯",
+            );
+          }
+        }
+        if (hcp >= 16 && ["4♥", "4♠"].includes(opener_rebid_bid)) {
+          return bidRecommendation(
+            "Pass",
+            `拼搏式 3NT-4♦-${opener_rebid_bid} 后，开叫者已报单缺；当前简化体系建议先止叫，由开叫者牌型决定定约。你有 ${hcp} HCP，牌型：${length_text}。`,
+            "拼搏式 3NT 后止叫",
+          );
+        }
+        return bidRecommendation(
+          "Pass",
+          `拼搏式 3NT-4♦-${opener_rebid_bid} 后，当前简化体系以止叫为主，建议 Pass。你有 ${hcp} HCP，牌型：${length_text}。`,
+          "拼搏式 3NT 后止叫",
+        );
+      }
+    }
+    if (["4♥", "4♠"].includes(response_bid)) {
+      return bidRecommendation(
+        "Pass",
+        `拼搏式 3NT 后你已叫出高花成局 ${response_bid}，开叫者再叫 ${opener_rebid_bid} 后通常止叫。你有 ${hcp} HCP，牌型：${length_text}。`,
+        "拼搏式 3NT 后止叫",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `拼搏式 3NT 序列中同伴再叫 ${opener_rebid_bid}，当前简化体系建议 Pass。你有 ${hcp} HCP，牌型：${length_text}。`,
+      "拼搏式 3NT 后止叫",
+    );
+  }
+
   const opener_rebid_contract = parse_contract_bid(opener_rebid_bid);
   const response_contract = parse_contract_bid(response_bid);
   if (opener_rebid_contract === null || response_contract === null) {
@@ -2039,6 +2195,57 @@ function recommend_response_to_2nt(evaluation, settings, vulnerability) {
   );
 }
 
+function has_suit_stopper(evaluation, suit) {
+  // 简化止张：至少 2 张且含 A/K/Q 之一。
+  return evaluation.lengths[suit] >= 2 && (evaluation.top_honors_by_suit[suit] || 0) >= 1;
+}
+
+function recommend_response_to_gambling_3nt(evaluation, settings) {
+  // 拼搏式 3NT 应叫：Pass 打无将；4♣ Pass or correct；4♦ 问单缺；4M 自有高花成局。
+  settings = settings || defaultRuleSettings();
+  const hcp = evaluation.hcp;
+  const lengths = evaluation.lengths;
+  const length_text = describe_lengths(evaluation);
+
+  const six_plus_majors = ["S", "H"].filter((suit) => lengths[suit] >= 6);
+  if (six_plus_majors.length) {
+    const major = six_plus_majors.slice().sort((a, b) => {
+      if (lengths[b] !== lengths[a]) {
+        return lengths[b] - lengths[a];
+      }
+      return (b === "S" ? 1 : 0) - (a === "S" ? 1 : 0);
+    })[0];
+    const major_bid = `4${suit_symbol(major)}`;
+    return bidRecommendation(
+      major_bid,
+      `同伴拼搏式 3NT，你有 ${hcp} HCP 和 ${lengths[major]} 张 ${SUIT_NAMES[major]}，直接叫 ${major_bid} 打高花成局。牌型：${length_text}。`,
+      "拼搏式 3NT 后高花成局",
+    );
+  }
+
+  const both_majors_stopped = has_suit_stopper(evaluation, "H") && has_suit_stopper(evaluation, "S");
+  if (both_majors_stopped) {
+    if (hcp >= 16 && is_legal_response_bid("3NT", "4♦")) {
+      return bidRecommendation(
+        "4♦",
+        `同伴拼搏式 3NT，你有 ${hcp} HCP 且两边高花有止，牌力足够用 4♦ 询问开叫者单缺、试探满贯。牌型：${length_text}。`,
+        "拼搏式 3NT 后问单缺",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `同伴拼搏式 3NT，你有 ${hcp} HCP 且两边高花有止，接受打 3NT。牌型：${length_text}。`,
+      "拼搏式 3NT 后止叫",
+    );
+  }
+
+  return bidRecommendation(
+    "4♣",
+    `同伴拼搏式 3NT，你有 ${hcp} HCP 但高花止张不足，叫 4♣（Pass or correct）转入开叫者坚固低花。牌型：${length_text}。`,
+    "拼搏式 3NT 后 Pass or correct",
+  );
+}
+
 function get_splinter_bid(major, splinter_suit) {
   return `3${suit_symbol(splinter_suit)}`;
 }
@@ -2641,6 +2848,42 @@ function choose_preempt_opening(lengths, hcp) {
   return null;
 }
 
+function choose_gambling_3nt_minor(evaluation, opening_min_hcp) {
+  // 拼搏式 3NT：7+ 坚固低花（含 AKQ），边张无 A/K/Q，且未达一阶开叫点力。
+  if (opening_min_hcp == null) {
+    opening_min_hcp = 12;
+  }
+  if (evaluation.hcp >= opening_min_hcp) {
+    return null;
+  }
+  const lengths = evaluation.lengths;
+  const honors = evaluation.top_honors_by_suit || {};
+  const candidates = [];
+  for (const suit of ["C", "D"]) {
+    if (lengths[suit] < 7 || (honors[suit] || 0) < 3) {
+      continue;
+    }
+    let outside_top = 0;
+    for (const other of ["S", "H", "D", "C"]) {
+      if (other !== suit) {
+        outside_top += honors[other] || 0;
+      }
+    }
+    if (outside_top === 0) {
+      candidates.push(suit);
+    }
+  }
+  if (!candidates.length) {
+    return null;
+  }
+  return candidates.slice().sort((a, b) => {
+    if (lengths[b] !== lengths[a]) {
+      return lengths[b] - lengths[a];
+    }
+    return (b === "D" ? 1 : 0) - (a === "D" ? 1 : 0);
+  })[0];
+}
+
 function choose_two_over_one_suit(lengths, excluded) {
   const candidates = ["C", "D", "H"].filter((suit) => suit !== excluded && lengths[suit] >= 4);
   if (!candidates.length) {
@@ -2700,6 +2943,8 @@ module.exports = {
   recommend_responder_rebid,
   recommend_response_to_1nt,
   recommend_response_to_2nt,
+  has_suit_stopper,
+  recommend_response_to_gambling_3nt,
   get_splinter_bid,
   find_splinter_suit,
   recommend_response_to_major,
@@ -2711,6 +2956,7 @@ module.exports = {
   choose_minor_opening,
   choose_weak_two,
   choose_preempt_opening,
+  choose_gambling_3nt_minor,
   choose_two_over_one_suit,
   choose_one_level_major_response,
   eleven_hcp_secondary_opening_bid,

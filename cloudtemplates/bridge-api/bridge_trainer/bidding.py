@@ -21,6 +21,7 @@ OPENING_BIDS = [
     "3♦",
     "3♥",
     "3♠",
+    "3NT",
     "4♣",
     "4♦",
     "4♥",
@@ -257,6 +258,18 @@ def recommend_opening(
                 "11 点轻开叫",
             )
 
+    # 拼搏式 3NT：7+ 坚固低花（含 AKQ），边张无 A/K/Q；优先于同档阻击叫。
+    gambling_minor = choose_gambling_3nt_minor(evaluation, settings.opening_min_hcp)
+    if gambling_minor is not None:
+        return BidRecommendation(
+            "3NT",
+            (
+                f"{hcp} HCP，持有 {lengths[gambling_minor]} 张坚固 {SUIT_NAMES[gambling_minor]}（含 AKQ），"
+                f"边张无大牌，开叫拼搏式 3NT。牌型：{length_text}。"
+            ),
+            "拼搏式 3NT",
+        )
+
     preempt = choose_preempt_opening(lengths, hcp) if settings.weak_two_enabled else None
     if preempt is not None:
         return BidRecommendation(
@@ -334,6 +347,9 @@ def recommend_response(
 
     if opener_bid == "2NT":
         return recommend_response_to_2nt(evaluation, settings, vulnerability)
+
+    if opener_bid == "3NT":
+        return recommend_response_to_gambling_3nt(evaluation, settings)
 
     if opener_bid in {"2♦", "2♥", "2♠", "3♣", "3♦", "3♥", "3♠", "4♣", "4♦", "4♥", "4♠", "5♣", "5♦"}:
         return recommend_response_to_preempt(opener_bid, evaluation, settings)
@@ -619,6 +635,63 @@ def recommend_opener_rebid(
 
         if response_bid == "3♥" and settings.transfers_enabled and is_legal_response_bid(response_bid, "3♠"):
             return BidRecommendation("3♠", f"2NT-3♥ 序列中，3♥ 为黑桃转移，开叫者应接受转移叫 3♠。牌型：{length_text}。", "2NT 后接受黑桃转移")
+
+    # 拼搏式 3NT 后再叫：4♣=Pass or correct；4♦=问单缺；4M=止叫。
+    if opening_bid == "3NT":
+        gambling_minor = choose_gambling_3nt_minor(evaluation, settings.opening_min_hcp) or (
+            "C" if lengths["C"] >= lengths["D"] else "D"
+        )
+        minor_symbol = suit_symbol(gambling_minor)
+        if response_bid == "4♣":
+            if gambling_minor == "C":
+                return BidRecommendation(
+                    "Pass",
+                    f"拼搏式 3NT 后同伴叫 4♣（Pass or correct），你的真实花色是梅花，接受并止叫 Pass。牌型：{length_text}。",
+                    "拼搏式 3NT 后接受梅花",
+                )
+            if is_legal_response_bid(response_bid, "4♦"):
+                return BidRecommendation(
+                    "4♦",
+                    f"拼搏式 3NT 后同伴叫 4♣（Pass or correct），你的真实花色是方块，改叫 4♦。牌型：{length_text}。",
+                    "拼搏式 3NT 后改叫方块",
+                )
+        if response_bid == "4♦":
+            short_majors = [suit for suit in ["H", "S"] if lengths[suit] <= 1]
+            for suit in short_majors:
+                shortage_bid = f"4{suit_symbol(suit)}"
+                if is_legal_response_bid(response_bid, shortage_bid):
+                    return BidRecommendation(
+                        shortage_bid,
+                        f"拼搏式 3NT 后同伴以 4♦ 询问单缺，你在 {SUIT_NAMES[suit]} 单缺，回答 {shortage_bid}。牌型：{length_text}。",
+                        "拼搏式 3NT 后报单缺",
+                    )
+            other_minor = "D" if gambling_minor == "C" else "C"
+            if lengths[other_minor] <= 1:
+                other_bid = f"5{suit_symbol(other_minor)}"
+                if is_legal_response_bid(response_bid, other_bid):
+                    return BidRecommendation(
+                        other_bid,
+                        f"拼搏式 3NT 后同伴以 4♦ 询问单缺，你在 {SUIT_NAMES[other_minor]} 单缺，回答 {other_bid}。牌型：{length_text}。",
+                        "拼搏式 3NT 后报单缺",
+                    )
+            own_five = f"5{minor_symbol}"
+            if is_legal_response_bid(response_bid, own_five):
+                return BidRecommendation(
+                    own_five,
+                    f"拼搏式 3NT 后同伴以 4♦ 询问单缺，你无高花单缺，重叫己方坚固低花 {own_five}。牌型：{length_text}。",
+                    "拼搏式 3NT 后无单缺重叫低花",
+                )
+        if response_bid in {"4♥", "4♠"}:
+            return BidRecommendation(
+                "Pass",
+                f"拼搏式 3NT 后同伴叫 {response_bid} 表示自有高花成局，开叫者止叫 Pass。牌型：{length_text}。",
+                "拼搏式 3NT 后高花止叫",
+            )
+        return BidRecommendation(
+            "Pass",
+            f"拼搏式 3NT 后同伴叫 {response_bid}，当前简化体系以止叫为主，建议 Pass。牌型：{length_text}。",
+            "拼搏式 3NT 后止叫",
+        )
 
     # Jacoby 2NT：一阶高花开叫后，2NT 显示 4+ 将牌支持与进局实力。
     if opening_bid in {"1♥", "1♠"} and response_bid == "2NT":
@@ -1196,8 +1269,62 @@ def recommend_responder_rebid(
     lengths = evaluation.lengths
     length_text = describe_lengths(evaluation)
 
-    opener_rebid_contract = parse_contract_bid(opener_rebid_bid)
     response_contract = parse_contract_bid(response_bid)
+    opener_rebid_contract = parse_contract_bid(opener_rebid_bid)
+
+    # 拼搏式 3NT：开叫者可能再叫 Pass（确认梅花），需在合约解析兜底之前处理。
+    if opening_bid == "3NT" and response_contract is not None:
+        previous_for_legal = response_bid if opener_rebid_bid == "Pass" else opener_rebid_bid
+        if response_bid == "4♣" and opener_rebid_bid == "Pass":
+            if hcp >= 16 and is_legal_response_bid(previous_for_legal, "5♣"):
+                return BidRecommendation(
+                    "5♣",
+                    f"拼搏式 3NT-4♣ 后开叫者 Pass 确认梅花，你有 {hcp} HCP，加叫到 5♣。牌型：{length_text}。",
+                    "拼搏式 3NT 后进低花局",
+                )
+            return BidRecommendation(
+                "Pass",
+                f"拼搏式 3NT-4♣ 后开叫者 Pass 确认梅花，当前牌力以止叫为主，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+                "拼搏式 3NT 后止叫",
+            )
+        if response_bid == "4♣" and opener_rebid_bid == "4♦":
+            if hcp >= 16 and is_legal_response_bid(opener_rebid_bid, "5♦"):
+                return BidRecommendation(
+                    "5♦",
+                    f"拼搏式 3NT-4♣-4♦ 后确认方块，你有 {hcp} HCP，加叫到 5♦。牌型：{length_text}。",
+                    "拼搏式 3NT 后进低花局",
+                )
+            return BidRecommendation(
+                "Pass",
+                f"拼搏式 3NT-4♣-4♦ 后确认方块，当前牌力以止叫为主，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+                "拼搏式 3NT 后止叫",
+            )
+        if response_bid == "4♦" and opener_rebid_bid in {"4♥", "4♠", "5♣", "5♦"}:
+            if hcp >= 18 and opener_rebid_bid in {"5♣", "5♦"}:
+                slam = f"6{opener_rebid_bid[1:]}"
+                if is_legal_response_bid(opener_rebid_bid, slam):
+                    return BidRecommendation(
+                        slam,
+                        f"拼搏式 3NT-4♦-{opener_rebid_bid} 后，你有 {hcp} HCP，尝试低花小满贯 {slam}。牌型：{length_text}。",
+                        "拼搏式 3NT 后试探满贯",
+                    )
+            return BidRecommendation(
+                "Pass",
+                f"拼搏式 3NT-4♦-{opener_rebid_bid} 后，当前简化体系以止叫为主，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+                "拼搏式 3NT 后止叫",
+            )
+        if response_bid in {"4♥", "4♠"}:
+            return BidRecommendation(
+                "Pass",
+                f"拼搏式 3NT 后你已叫出高花成局 {response_bid}，开叫者再叫 {opener_rebid_bid} 后通常止叫。你有 {hcp} HCP，牌型：{length_text}。",
+                "拼搏式 3NT 后止叫",
+            )
+        return BidRecommendation(
+            "Pass",
+            f"拼搏式 3NT 序列中同伴再叫 {opener_rebid_bid}，当前简化体系建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+            "拼搏式 3NT 后止叫",
+        )
+
     if opener_rebid_contract is None or response_contract is None:
         return BidRecommendation(
             "Pass",
@@ -1212,6 +1339,7 @@ def recommend_responder_rebid(
         opening_level, opening_strain = opening_contract
         is_weak_two_opening = opening_level == 2 and opening_strain in {"♦", "♥", "♠"}
         is_three_plus_preempt_opening = opening_level >= 3 and opening_strain in {"♣", "♦", "♥", "♠"}
+
         if is_three_plus_preempt_opening:
             return BidRecommendation(
                 "Pass",
@@ -1735,6 +1863,52 @@ def recommend_response_to_2nt(
         "3NT",
         f"同伴 2NT 表示 20-21 均型，你有 {hcp} HCP 且无高花优先处理，直接叫 3NT 成局。牌型：{length_text}。",
         "2NT 后进局",
+    )
+
+
+def has_suit_stopper(evaluation: HandEvaluation, suit: str) -> bool:
+    """简化止张：至少 2 张且含 A/K/Q 之一。"""
+    return evaluation.lengths[suit] >= 2 and evaluation.top_honors_by_suit.get(suit, 0) >= 1
+
+
+def recommend_response_to_gambling_3nt(
+    evaluation: HandEvaluation,
+    settings: RuleSettings | None = None,
+) -> BidRecommendation:
+    """拼搏式 3NT 应叫：Pass 打无将；4♣ Pass or correct；4♦ 问单缺；4M 自有高花成局。"""
+    settings = settings or default_rule_settings()
+    hcp = evaluation.hcp
+    lengths = evaluation.lengths
+    length_text = describe_lengths(evaluation)
+
+    six_plus_majors = [suit for suit in ["S", "H"] if lengths[suit] >= 6]
+    if six_plus_majors:
+        major = max(six_plus_majors, key=lambda suit: (lengths[suit], suit == "S"))
+        major_bid = f"4{suit_symbol(major)}"
+        return BidRecommendation(
+            major_bid,
+            f"同伴拼搏式 3NT，你有 {hcp} HCP 和 {lengths[major]} 张 {SUIT_NAMES[major]}，直接叫 {major_bid} 打高花成局。牌型：{length_text}。",
+            "拼搏式 3NT 后高花成局",
+        )
+
+    both_majors_stopped = has_suit_stopper(evaluation, "H") and has_suit_stopper(evaluation, "S")
+    if both_majors_stopped:
+        if hcp >= 16 and is_legal_response_bid("3NT", "4♦"):
+            return BidRecommendation(
+                "4♦",
+                f"同伴拼搏式 3NT，你有 {hcp} HCP 且两边高花有止，牌力足够用 4♦ 询问开叫者单缺、试探满贯。牌型：{length_text}。",
+                "拼搏式 3NT 后问单缺",
+            )
+        return BidRecommendation(
+            "Pass",
+            f"同伴拼搏式 3NT，你有 {hcp} HCP 且两边高花有止，接受打 3NT。牌型：{length_text}。",
+            "拼搏式 3NT 后止叫",
+        )
+
+    return BidRecommendation(
+        "4♣",
+        f"同伴拼搏式 3NT，你有 {hcp} HCP 但高花止张不足，叫 4♣（Pass or correct）转入开叫者坚固低花。牌型：{length_text}。",
+        "拼搏式 3NT 后 Pass or correct",
     )
 
 
@@ -2277,6 +2451,27 @@ def choose_preempt_opening(lengths: dict[str, int], hcp: int) -> str | None:
     if length >= 7:
         return f"3{suit_symbol(suit)}"
     return None
+
+
+def choose_gambling_3nt_minor(
+    evaluation: HandEvaluation,
+    opening_min_hcp: int = 12,
+) -> str | None:
+    """拼搏式 3NT：7+ 坚固低花（含 AKQ），边张无 A/K/Q，且未达一阶开叫点力。"""
+    if evaluation.hcp >= opening_min_hcp:
+        return None
+    lengths = evaluation.lengths
+    honors = evaluation.top_honors_by_suit
+    candidates: list[str] = []
+    for suit in ["C", "D"]:
+        if lengths[suit] < 7 or honors.get(suit, 0) < 3:
+            continue
+        outside_top = sum(honors.get(other, 0) for other in ["S", "H", "D", "C"] if other != suit)
+        if outside_top == 0:
+            candidates.append(suit)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda suit: (lengths[suit], suit == "D"))
 
 
 def choose_two_over_one_suit(lengths: dict[str, int], excluded: str) -> str | None:

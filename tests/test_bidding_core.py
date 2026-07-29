@@ -164,6 +164,23 @@ class OpeningRecommendationTests(unittest.TestCase):
     def test_three_level_preempt_with_seven_card_suit(self) -> None:
         self.assertEqual(recommend_opening(evaluation(8, 2, 2, 7, 2, balanced=False), vulnerability=VULNERABILITY).bid, "3♦")
 
+    def test_gambling_3nt_with_solid_seven_card_minor(self) -> None:
+        # AKQxxxx 草花、边张无大牌 → 拼搏式 3NT，优先于 3♣ 阻击
+        result = recommend_opening(
+            evaluation(9, 2, 2, 2, 7, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 3}),
+            vulnerability=VULNERABILITY,
+        )
+        self.assertEqual(result.bid, "3NT")
+        self.assertEqual(result.rule_name, "拼搏式 3NT")
+
+    def test_gambling_3nt_not_used_with_outside_top_honor(self) -> None:
+        # 边张有大牌时不走拼搏式，仍按阻击开叫
+        result = recommend_opening(
+            evaluation(10, 2, 2, 2, 7, balanced=False, top_honors_by_suit={"S": 1, "H": 0, "D": 0, "C": 3}),
+            vulnerability=VULNERABILITY,
+        )
+        self.assertEqual(result.bid, "3♣")
+
     def test_four_level_preempt_with_eight_card_major(self) -> None:
         self.assertEqual(recommend_opening(evaluation(8, 8, 2, 2, 1, balanced=False), vulnerability=VULNERABILITY).bid, "4♠")
 
@@ -499,6 +516,30 @@ class ResponseRecommendationTests(unittest.TestCase):
 
     def test_two_nt_response_uses_three_nt_without_major(self) -> None:
         self.assertEqual(recommend_response("2NT", evaluation(2, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "3NT")
+
+    def test_gambling_3nt_response_passes_with_major_stoppers(self) -> None:
+        hand = evaluation(10, 3, 3, 4, 3, top_honors_by_suit={"S": 1, "H": 1, "D": 0, "C": 0})
+        result = recommend_response("3NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "拼搏式 3NT 后止叫")
+
+    def test_gambling_3nt_response_escapes_without_stoppers(self) -> None:
+        hand = evaluation(6, 3, 3, 4, 3, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 0})
+        result = recommend_response("3NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♣")
+        self.assertEqual(result.rule_name, "拼搏式 3NT 后 Pass or correct")
+
+    def test_gambling_3nt_response_asks_shortage_when_strong(self) -> None:
+        hand = evaluation(16, 3, 3, 4, 3, top_honors_by_suit={"S": 1, "H": 1, "D": 1, "C": 1})
+        result = recommend_response("3NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♦")
+        self.assertEqual(result.rule_name, "拼搏式 3NT 后问单缺")
+
+    def test_gambling_3nt_response_bids_six_card_major_game(self) -> None:
+        hand = evaluation(8, 6, 2, 3, 2, balanced=False, top_honors_by_suit={"S": 1, "H": 0, "D": 0, "C": 0})
+        result = recommend_response("3NT", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♠")
+        self.assertEqual(result.rule_name, "拼搏式 3NT 后高花成局")
 
     def test_preempt_response_passes_without_clear_action(self) -> None:
         self.assertEqual(recommend_response("3♦", evaluation(6, 4, 3, 2, 4, balanced=False), vulnerability=VULNERABILITY).bid, "Pass")
@@ -942,6 +983,36 @@ class RebidRecommendationTests(unittest.TestCase):
     def test_two_nt_three_nt_sequence_stops(self) -> None:
         hand = evaluation(20, 3, 3, 4, 3)
         self.assertEqual(recommend_opener_rebid("2NT", "3NT", hand, vulnerability=VULNERABILITY).bid, "Pass")
+
+    def test_gambling_3nt_opener_passes_after_four_clubs_with_clubs(self) -> None:
+        hand = evaluation(9, 2, 2, 2, 7, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 3})
+        result = recommend_opener_rebid("3NT", "4♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "拼搏式 3NT 后接受梅花")
+
+    def test_gambling_3nt_opener_corrects_to_diamonds(self) -> None:
+        hand = evaluation(9, 2, 2, 7, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 3, "C": 0})
+        result = recommend_opener_rebid("3NT", "4♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♦")
+        self.assertEqual(result.rule_name, "拼搏式 3NT 后改叫方块")
+
+    def test_gambling_3nt_opener_shows_short_heart_after_ask(self) -> None:
+        hand = evaluation(9, 2, 1, 3, 7, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 3})
+        result = recommend_opener_rebid("3NT", "4♦", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "拼搏式 3NT 后报单缺")
+
+    def test_gambling_3nt_responder_raises_clubs_after_pass(self) -> None:
+        hand = evaluation(16, 3, 3, 4, 3, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 0})
+        result = recommend_responder_rebid("3NT", "4♣", "Pass", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "5♣")
+        self.assertEqual(result.rule_name, "拼搏式 3NT 后进低花局")
+
+    def test_gambling_3nt_responder_passes_after_diamond_correction(self) -> None:
+        hand = evaluation(8, 3, 3, 4, 3, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 0})
+        result = recommend_responder_rebid("3NT", "4♣", "4♦", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "拼搏式 3NT 后止叫")
 
     def test_one_nt_three_nt_sequence_stops(self) -> None:
         hand = evaluation(16, 3, 3, 4, 3)

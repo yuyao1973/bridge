@@ -24,6 +24,7 @@ const OPENING_BIDS = [
   "3♦",
   "3♥",
   "3♠",
+  "3NT",
   "4♣",
   "4♦",
   "4♥",
@@ -255,6 +256,48 @@ function recommendOpening(evaluation, settings) {
       };
     }
   }
+
+  // 拼搏式 3NT：7+ 坚固低花（含 AKQ），边张无 A/K/Q；优先于弱二/阻击。
+  if (hcp < settings.opening_min_hcp) {
+    const honors = evaluation.top_honors_by_suit || {};
+    const gamblingCandidates = [];
+    ["C", "D"].forEach(function (suit) {
+      if (lengths[suit] < 7 || (honors[suit] || 0) < 3) {
+        return;
+      }
+      let outsideTop = 0;
+      ["S", "H", "D", "C"].forEach(function (other) {
+        if (other !== suit) {
+          outsideTop += honors[other] || 0;
+        }
+      });
+      if (outsideTop === 0) {
+        gamblingCandidates.push(suit);
+      }
+    });
+    if (gamblingCandidates.length) {
+      const gamblingSuit = gamblingCandidates.slice().sort(function (a, b) {
+        if (lengths[b] !== lengths[a]) {
+          return lengths[b] - lengths[a];
+        }
+        return (b === "D" ? 1 : 0) - (a === "D" ? 1 : 0);
+      })[0];
+      return {
+        bid: "3NT",
+        explanation:
+          hcp +
+          " HCP，持有 " +
+          lengths[gamblingSuit] +
+          " 张坚固 " +
+          SUIT_NAMES[gamblingSuit] +
+          "（含 AKQ），边张无大牌，开叫拼搏式 3NT。牌型：" +
+          lengthText +
+          "。",
+        rule_name: "拼搏式 3NT",
+      };
+    }
+  }
+
   if (settings.weak_two_enabled) {
     if (hcp >= 6 && hcp <= 10) {
       const candidates = ["S", "H", "D"].filter(function (suit) {

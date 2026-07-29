@@ -3,8 +3,10 @@ const {
   REBID_BIDS,
   RESPONSE_BIDS,
   RESPONDER_REBID_BIDS,
+  choose_gambling_3nt_minor,
   defaultRuleSettings,
   eleven_hcp_secondary_opening_bid,
+  has_suit_stopper,
   legal_response_bids,
   legal_rebid_bids,
   legal_responder_rebid_bids,
@@ -23,7 +25,7 @@ const { PythonRandom } = require('./random')
 const ONE_LEVEL_OPENINGS = new Set(['1♣', '1♦', '1♥', '1♠', '1NT'])
 const STRONG_OPENINGS = new Set(['2♣', '2NT'])
 const PREEMPT_OPENINGS = new Set([
-  '2♦', '2♥', '2♠', '3♣', '3♦', '3♥', '3♠',
+  '2♦', '2♥', '2♠', '3♣', '3♦', '3♥', '3♠', '3NT',
   '4♣', '4♦', '4♥', '4♠', '5♣', '5♦',
 ])
 const SUPPORTED_FILTER_OPENINGS = new Set()
@@ -55,6 +57,10 @@ const DIRECTED_OPENER_REBID_SEQUENCES = new Set([
   '2NT|3♥',
   '1♥|2NT',
   '1♠|2NT',
+  '3NT|4♣',
+  '3NT|4♦',
+  '3NT|4♥',
+  '3NT|4♠',
 ])
 
 const DIRECTED_RESPONDER_REBID_SEQUENCES = new Set([
@@ -65,6 +71,12 @@ const DIRECTED_RESPONDER_REBID_SEQUENCES = new Set([
   '1NT|2♥|2♠',
   '1♥|2NT|4♥',
   '1♠|2NT|4♠',
+  '3NT|4♣|Pass',
+  '3NT|4♣|4♦',
+  '3NT|4♦|4♥',
+  '3NT|4♦|4♠',
+  '3NT|4♦|5♣',
+  '3NT|4♦|5♦',
 ])
 
 function openerRebidSeqKey(openerBid, responseBid) {
@@ -138,6 +150,27 @@ function matchesCommonOpenerRebidPrefilter(
     return settings.jacoby_2nt_enabled && openerLengths.S >= 5 && responderLengths.S >= 4 && responderEvaluation.hcp >= 12
   }
 
+  if (openerBid === '3NT') {
+    const gamblingMinor = choose_gambling_3nt_minor(openerEvaluation, settings.opening_min_hcp)
+    if (gamblingMinor == null) {
+      return false
+    }
+    const sixPlusMajors = responderLengths.H >= 6 || responderLengths.S >= 6
+    const bothStopped = has_suit_stopper(responderEvaluation, 'H') && has_suit_stopper(responderEvaluation, 'S')
+    if (responseBid === '4♣') {
+      return !sixPlusMajors && !bothStopped
+    }
+    if (responseBid === '4♦') {
+      return !sixPlusMajors && bothStopped && responderEvaluation.hcp >= 16
+    }
+    if (responseBid === '4♥') {
+      return responderLengths.H >= 6 && responderLengths.H >= responderLengths.S
+    }
+    if (responseBid === '4♠') {
+      return responderLengths.S >= 6 && responderLengths.S > responderLengths.H
+    }
+  }
+
   return true
 }
 
@@ -202,6 +235,49 @@ function matchesCommonResponderRebidPrefilter(
       return false
     }
     return openerRebidBid !== '4♠' || openerLengths.S >= 5
+  }
+
+  if (openerBid === '3NT') {
+    const gamblingMinor = choose_gambling_3nt_minor(openerEvaluation, settings.opening_min_hcp)
+    if (gamblingMinor == null) {
+      return false
+    }
+    const sixPlusMajors = responderLengths.H >= 6 || responderLengths.S >= 6
+    const bothStopped = has_suit_stopper(responderEvaluation, 'H') && has_suit_stopper(responderEvaluation, 'S')
+    if (responseBid === '4♣') {
+      if (sixPlusMajors || bothStopped) {
+        return false
+      }
+      if (openerRebidBid === 'Pass') {
+        return gamblingMinor === 'C'
+      }
+      if (openerRebidBid === '4♦') {
+        return gamblingMinor === 'D'
+      }
+      return true
+    }
+    if (responseBid === '4♦') {
+      if (sixPlusMajors || !bothStopped || responderEvaluation.hcp < 16) {
+        return false
+      }
+      if (openerRebidBid === '4♥' || openerRebidBid === '4♠') {
+        const suit = openerRebidBid === '4♥' ? 'H' : 'S'
+        return openerLengths[suit] <= 1
+      }
+      if (openerRebidBid === '5♣') {
+        return (
+          (gamblingMinor === 'D' && openerLengths.C <= 1 && openerLengths.H > 1 && openerLengths.S > 1)
+          || (gamblingMinor === 'C' && openerLengths.H > 1 && openerLengths.S > 1 && openerLengths.D > 1)
+        )
+      }
+      if (openerRebidBid === '5♦') {
+        return (
+          (gamblingMinor === 'C' && openerLengths.D <= 1 && openerLengths.H > 1 && openerLengths.S > 1)
+          || (gamblingMinor === 'D' && openerLengths.H > 1 && openerLengths.S > 1 && openerLengths.C > 1)
+        )
+      }
+      return true
+    }
   }
 
   return true
@@ -315,6 +391,72 @@ function getSequenceConstraints(openerBid, responseBid, openerRebidBid, settings
     return ev.hcp >= 12 && ev.lengths.S >= 4
   }
 
+  function gambling3ntOpener(hand) {
+    return choose_gambling_3nt_minor(evaluate_hand(hand), settings.opening_min_hcp) != null
+  }
+
+  function gambling3ntClubsOpener(hand) {
+    return choose_gambling_3nt_minor(evaluate_hand(hand), settings.opening_min_hcp) === 'C'
+  }
+
+  function gambling3ntDiamondsOpener(hand) {
+    return choose_gambling_3nt_minor(evaluate_hand(hand), settings.opening_min_hcp) === 'D'
+  }
+
+  function gamblingEscapeResponder(hand) {
+    const ev = evaluate_hand(hand)
+    if (ev.lengths.H >= 6 || ev.lengths.S >= 6) {
+      return false
+    }
+    return !(has_suit_stopper(ev, 'H') && has_suit_stopper(ev, 'S'))
+  }
+
+  function gamblingAskResponder(hand) {
+    const ev = evaluate_hand(hand)
+    if (ev.lengths.H >= 6 || ev.lengths.S >= 6) {
+      return false
+    }
+    return ev.hcp >= 16 && has_suit_stopper(ev, 'H') && has_suit_stopper(ev, 'S')
+  }
+
+  function gamblingHeartsGameResponder(hand) {
+    const ev = evaluate_hand(hand)
+    return ev.lengths.H >= 6 && ev.lengths.H >= ev.lengths.S
+  }
+
+  function gamblingSpadesGameResponder(hand) {
+    const ev = evaluate_hand(hand)
+    return ev.lengths.S >= 6 && ev.lengths.S > ev.lengths.H
+  }
+
+  function gamblingShortHeartsOpener(hand) {
+    const ev = evaluate_hand(hand)
+    return choose_gambling_3nt_minor(ev, settings.opening_min_hcp) != null && ev.lengths.H <= 1
+  }
+
+  function gamblingShortSpadesOpener(hand) {
+    const ev = evaluate_hand(hand)
+    return choose_gambling_3nt_minor(ev, settings.opening_min_hcp) != null && ev.lengths.S <= 1
+  }
+
+  function gamblingFiveClubAfterAskOpener(hand) {
+    const ev = evaluate_hand(hand)
+    const minor = choose_gambling_3nt_minor(ev, settings.opening_min_hcp)
+    if (minor === 'D' && ev.lengths.C <= 1 && ev.lengths.H > 1 && ev.lengths.S > 1) {
+      return true
+    }
+    return minor === 'C' && ev.lengths.H > 1 && ev.lengths.S > 1 && ev.lengths.D > 1
+  }
+
+  function gamblingFiveDiamondAfterAskOpener(hand) {
+    const ev = evaluate_hand(hand)
+    const minor = choose_gambling_3nt_minor(ev, settings.opening_min_hcp)
+    if (minor === 'C' && ev.lengths.D <= 1 && ev.lengths.H > 1 && ev.lengths.S > 1) {
+      return true
+    }
+    return minor === 'D' && ev.lengths.H > 1 && ev.lengths.S > 1 && ev.lengths.C > 1
+  }
+
   if (openerRebidBid == null) {
     if (openerBid === '1NT' && responseBid === '2♣') {
       return [nt1, staymanResponder]
@@ -340,6 +482,18 @@ function getSequenceConstraints(openerBid, responseBid, openerRebidBid, settings
     if (openerBid === '1♠' && responseBid === '2NT' && settings.jacoby_2nt_enabled) {
       return [spades5Opener, jacobySpadesResponder]
     }
+    if (openerBid === '3NT' && responseBid === '4♣') {
+      return [gambling3ntOpener, gamblingEscapeResponder]
+    }
+    if (openerBid === '3NT' && responseBid === '4♦') {
+      return [gambling3ntOpener, gamblingAskResponder]
+    }
+    if (openerBid === '3NT' && responseBid === '4♥') {
+      return [gambling3ntOpener, gamblingHeartsGameResponder]
+    }
+    if (openerBid === '3NT' && responseBid === '4♠') {
+      return [gambling3ntOpener, gamblingSpadesGameResponder]
+    }
   } else {
     if (openerBid === '1NT' && responseBid === '2♣') {
       if (openerRebidBid === '2♦') {
@@ -363,6 +517,28 @@ function getSequenceConstraints(openerBid, responseBid, openerRebidBid, settings
     }
     if (openerBid === '1♠' && responseBid === '2NT' && settings.jacoby_2nt_enabled) {
       return [spades5Opener, jacobySpadesResponder]
+    }
+    if (openerBid === '3NT' && responseBid === '4♣') {
+      if (openerRebidBid === 'Pass') {
+        return [gambling3ntClubsOpener, gamblingEscapeResponder]
+      }
+      if (openerRebidBid === '4♦') {
+        return [gambling3ntDiamondsOpener, gamblingEscapeResponder]
+      }
+    }
+    if (openerBid === '3NT' && responseBid === '4♦') {
+      if (openerRebidBid === '4♥') {
+        return [gamblingShortHeartsOpener, gamblingAskResponder]
+      }
+      if (openerRebidBid === '4♠') {
+        return [gamblingShortSpadesOpener, gamblingAskResponder]
+      }
+      if (openerRebidBid === '5♣') {
+        return [gamblingFiveClubAfterAskOpener, gamblingAskResponder]
+      }
+      if (openerRebidBid === '5♦') {
+        return [gamblingFiveDiamondAfterAskOpener, gamblingAskResponder]
+      }
     }
   }
 
@@ -781,7 +957,7 @@ function generateResponderRebidQuestion(
         resolvedSettings,
         vulnerability,
       )
-      if (openerRebidRecommendation.bid === 'Pass') {
+      if (openerRebidRecommendation.bid === 'Pass' && resolvedOpenerRebidBid !== 'Pass') {
         continue
       }
       if (resolvedOpenerRebidBid != null && openerRebidRecommendation.bid !== resolvedOpenerRebidBid) {
@@ -796,7 +972,10 @@ function generateResponderRebidQuestion(
         resolvedSettings,
         vulnerability,
       )
-      const legalChoices = legal_responder_rebid_bids(openerRebidRecommendation.bid)
+      // Pass 后再叫时按上一合约叫品生成合法选项（否则仅剩 Pass）。
+      const legalChoices = openerRebidRecommendation.bid === 'Pass'
+        ? legal_responder_rebid_bids(responseRecommendation.bid)
+        : legal_responder_rebid_bids(openerRebidRecommendation.bid)
       return createTrainingQuestion({
         hand: responderHand,
         evaluation: responderEvaluation,

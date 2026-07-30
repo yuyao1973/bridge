@@ -181,6 +181,89 @@ def game_threshold_adjustment(vulnerability: str | None, settings: RuleSettings)
     return -aggressiveness
 
 
+# README「开叫训练」原则摘要，用于判题解释援引。
+OPENING_RULE_PRINCIPLES: dict[str, str] = {
+    "强 2♣": "开叫训练原则第1条：22+ HCP（或达到设置的强 2♣ 下限）开叫 2♣。",
+    "20-21 均型 2NT": (
+        "开叫训练原则第2条：20-21 HCP 且均型或准均型门门有止"
+        "（可能有5张高花/6张低花套）开叫 2NT。"
+    ),
+    "均型 1NT": (
+        "开叫训练原则第3条：15-17 HCP（可设置）且均型或准均型门门有止"
+        "（可能有5张高花/6张低花套）开叫 1NT；如有5张高花，开叫一阶高花为次优。"
+    ),
+    "五张高花开叫": "开叫训练原则第4条：12+ HCP 且有5张以上高花，开叫较长高花；5-5 高花优先 1♠。",
+    "低花开叫": "开叫训练原则第5条：12+ HCP 无5张高花，按较长低花开叫；3-3 低花开 1♣，4-4 低花开 1♦。",
+    "11 点轻开叫": (
+        "开叫训练原则第6/7条：11 HCP 时，6+ 长套且有单缺开该长套；"
+        "或 5-5 以上双套（等长开较高花色；高花短于低花时优先较短高花，较长低花为次优）。"
+    ),
+    "拼搏式 3NT": (
+        "开叫训练原则第8条：7张以上坚固低花（含 AKQ），边张无 A/K/Q，"
+        "且未达一阶开叫点力时开拼搏式 3NT（优先于同档阻击）。"
+    ),
+    "阻击开叫": (
+        "开叫训练原则第9条：5-10 HCP 且7张以上长套，按套长作 3/4/5 阶阻击，"
+        "并遵循有局宕二、无局宕三。"
+    ),
+    "弱二开叫": (
+        "开叫训练原则第10条：6-10 HCP 且6张以上套，二阶弱二开 2♦/2♥/2♠"
+        "（不使用弱 2♣），并遵循有局宕二、无局宕三。"
+    ),
+    "6-6 双套弱二": "开叫训练原则第11条：6-10 HCP 且6-6双套，开二阶质量最好的套。",
+    "不叫": "开叫训练原则第12条：不满足以上开叫条件时 Pass。",
+}
+
+
+def lookup_opening_principle(rule_name: str | None) -> str | None:
+    if not rule_name:
+        return None
+    if rule_name in OPENING_RULE_PRINCIPLES:
+        return OPENING_RULE_PRINCIPLES[rule_name]
+    for key, text in OPENING_RULE_PRINCIPLES.items():
+        if rule_name.endswith(key):
+            return text
+    return None
+
+
+def with_opening_principle(explanation: str, rule_name: str) -> str:
+    principle = lookup_opening_principle(rule_name)
+    if not principle:
+        return explanation
+    return f"{explanation}\n\n依据原则：{principle}"
+
+
+def format_judgment_explanation(
+    *,
+    selected_bid: str | None,
+    recommended_bid: str | None,
+    grade: str,
+    base_explanation: str,
+    rule_name: str | None = None,
+    acceptable_bids: list[str] | None = None,
+) -> str:
+    """组装判题反馈：对照选择/推荐，并尽量援引 README 原则。"""
+    selected = selected_bid or "?"
+    recommended = recommended_bid or "?"
+    if grade == "primary":
+        header = f"判定：正确。你选择了 {selected}，与推荐叫品一致。"
+    elif grade == "acceptable":
+        alts = [b for b in (acceptable_bids or []) if b != recommended]
+        alt_text = f"；其他可接受：{', '.join(alts)}" if alts else ""
+        header = (
+            f"判定：可接受次优。你选择了 {selected}，主推仍是 {recommended}{alt_text}。"
+        )
+    else:
+        header = f"判定：不太合适。你选择了 {selected}，推荐叫品是 {recommended}。"
+
+    parts = [header, "", (base_explanation or "").strip()]
+    principle = lookup_opening_principle(rule_name)
+    # 若推荐解释里尚未写入原则，则在末尾补上。
+    if principle and "依据原则：" not in (base_explanation or ""):
+        parts.extend(["", f"依据原则：{principle}"])
+    return "\n".join(part for part in parts if part is not None).strip()
+
+
 def recommend_opening(
     evaluation: HandEvaluation,
     settings: RuleSettings | None = None,
@@ -194,47 +277,94 @@ def recommend_opening(
     if hcp >= settings.strong_two_club_min:
         return BidRecommendation(
             "2♣",
-            f"{hcp} HCP，达到当前设置的强 2♣ 下限 {settings.strong_two_club_min} HCP。牌型：{length_text}。",
+            with_opening_principle(
+                (
+                    f"你有 {hcp} HCP，达到强开叫门槛（当前设置下限 "
+                    f"{settings.strong_two_club_min} HCP），应开叫 2♣。牌型：{length_text}。"
+                ),
+                "强 2♣",
+            ),
             "强 2♣",
         )
 
-    if evaluation.balanced and 20 <= hcp <= 21:
+    if qualifies_for_nt_opening_shape(evaluation) and 20 <= hcp <= 21:
+        shape_text = "均型" if evaluation.balanced else "准均型且门门有止"
         return BidRecommendation(
             "2NT",
-            f"{hcp} HCP 且均型，符合 20-21 均型 2NT 开叫。牌型：{length_text}。",
+            with_opening_principle(
+                f"你有 {hcp} HCP，且为{shape_text}，符合 20-21 无将开叫，应开叫 2NT。牌型：{length_text}。",
+                "20-21 均型 2NT",
+            ),
             "20-21 均型 2NT",
         )
 
-    if evaluation.balanced and settings.one_nt_min <= hcp <= settings.one_nt_max:
+    if qualifies_for_nt_opening_shape(evaluation) and settings.one_nt_min <= hcp <= settings.one_nt_max:
+        shape_text = "均型" if evaluation.balanced else "准均型且门门有止"
+        rule_name = f"{settings.one_nt_min}-{settings.one_nt_max} 均型 1NT"
         secondary = one_nt_secondary_major_opening_bid(lengths)
         if secondary is not None:
             return BidRecommendation(
                 "1NT",
-                (
-                    f"{hcp} HCP 且均型，优先开叫 1NT；"
-                    f"持有 5 张高花时，开叫 {secondary} 为次优。牌型：{length_text}。"
+                with_opening_principle(
+                    (
+                        f"你有 {hcp} HCP，且为{shape_text}，优先开叫 1NT；"
+                        f"因另有 5 张高花，开叫 {secondary} 为可接受次优。牌型：{length_text}。"
+                    ),
+                    rule_name,
                 ),
-                f"{settings.one_nt_min}-{settings.one_nt_max} 均型 1NT",
+                rule_name,
             )
         return BidRecommendation(
             "1NT",
-            f"{hcp} HCP 且均型，符合当前设置的 {settings.one_nt_min}-{settings.one_nt_max} 均型 1NT 开叫。牌型：{length_text}。",
-            f"{settings.one_nt_min}-{settings.one_nt_max} 均型 1NT",
+            with_opening_principle(
+                (
+                    f"你有 {hcp} HCP，且为{shape_text}，符合当前 "
+                    f"{settings.one_nt_min}-{settings.one_nt_max} 无将开叫，应开叫 1NT。牌型：{length_text}。"
+                ),
+                rule_name,
+            ),
+            rule_name,
         )
 
     if hcp >= settings.opening_min_hcp and (lengths["S"] >= 5 or lengths["H"] >= 5):
         suit = choose_major_opening(lengths)
+        five_five_note = (
+            "两高花均为 5 张时优先开 1♠。"
+            if lengths["S"] >= 5 and lengths["H"] >= 5
+            else f"选择较长高花 {SUIT_NAMES[suit]}。"
+        )
         return BidRecommendation(
             f"1{suit_symbol(suit)}",
-            f"{hcp} HCP，达到当前一阶开叫下限 {settings.opening_min_hcp} HCP，持有 5 张以上高花，应优先开叫高花。选择 {SUIT_NAMES[suit]}，牌型：{length_text}。",
+            with_opening_principle(
+                (
+                    f"你有 {hcp} HCP（≥{settings.opening_min_hcp}），持有 5 张以上高花，"
+                    f"应优先开叫高花。{five_five_note}牌型：{length_text}。"
+                ),
+                "五张高花开叫",
+            ),
             "五张高花开叫",
         )
 
     if hcp >= settings.opening_min_hcp:
         suit = choose_minor_opening(lengths)
+        clubs, diamonds = lengths["C"], lengths["D"]
+        if clubs == diamonds == 3:
+            minor_note = "低花 3-3 等长，应开 1♣。"
+        elif clubs == diamonds:
+            minor_note = f"低花 {diamonds}-{clubs} 等长（含 4-4），应开 1♦。"
+        elif diamonds > clubs:
+            minor_note = f"方块更长（♦{diamonds}/♣{clubs}），应开 1♦。"
+        else:
+            minor_note = f"梅花更长（♣{clubs}/♦{diamonds}），应开 1♣。"
         return BidRecommendation(
             f"1{suit_symbol(suit)}",
-            f"{hcp} HCP，达到当前一阶开叫下限 {settings.opening_min_hcp} HCP，没有 5 张高花，按较长低花/Better Minor 原则开叫 {SUIT_NAMES[suit]}。牌型：{length_text}。",
+            with_opening_principle(
+                (
+                    f"你有 {hcp} HCP（≥{settings.opening_min_hcp}），没有 5 张高花，"
+                    f"应按较长低花开叫。{minor_note}牌型：{length_text}。"
+                ),
+                "低花开叫",
+            ),
             "低花开叫",
         )
 
@@ -246,15 +376,25 @@ def recommend_opening(
             if secondary is not None:
                 return BidRecommendation(
                     f"1{suit_symbol(light_suit)}",
-                    (
-                        f"{hcp} HCP，双套轻开叫优先开较短高花 1{suit_symbol(light_suit)}；"
-                        f"开叫较长低花 {secondary} 为次优。牌型：{length_text}。"
+                    with_opening_principle(
+                        (
+                            f"你有 {hcp} HCP，属 5-5 以上双套轻开叫：优先开较短高花 "
+                            f"1{suit_symbol(light_suit)}；开叫较长低花 {secondary} 为可接受次优。"
+                            f"牌型：{length_text}。"
+                        ),
+                        "11 点轻开叫",
                     ),
                     "11 点轻开叫",
                 )
             return BidRecommendation(
                 f"1{suit_symbol(light_suit)}",
-                f"{hcp} HCP，符合轻开叫条件，开叫 1{suit_symbol(light_suit)}。牌型：{length_text}。",
+                with_opening_principle(
+                    (
+                        f"你有 {hcp} HCP，符合轻开叫（6+ 长套且有单缺，或 5-5 以上双套），"
+                        f"应开叫 1{suit_symbol(light_suit)}。牌型：{length_text}。"
+                    ),
+                    "11 点轻开叫",
+                ),
                 "11 点轻开叫",
             )
 
@@ -263,46 +403,80 @@ def recommend_opening(
     if gambling_minor is not None:
         return BidRecommendation(
             "3NT",
-            (
-                f"{hcp} HCP，持有 {lengths[gambling_minor]} 张坚固 {SUIT_NAMES[gambling_minor]}（含 AKQ），"
-                f"边张无大牌，开叫拼搏式 3NT。牌型：{length_text}。"
+            with_opening_principle(
+                (
+                    f"你有 {hcp} HCP（未达一阶开叫点力），持有 {lengths[gambling_minor]} 张坚固 "
+                    f"{SUIT_NAMES[gambling_minor]}（含 AKQ），边张无 A/K/Q，"
+                    f"应开叫拼搏式 3NT（优先于同档阻击）。牌型：{length_text}。"
+                ),
+                "拼搏式 3NT",
             ),
             "拼搏式 3NT",
         )
 
-    preempt = choose_preempt_opening(lengths, hcp) if settings.weak_two_enabled else None
+    preempt = (
+        choose_preempt_opening(lengths, hcp, vulnerability)
+        if settings.weak_two_enabled
+        else None
+    )
     if preempt is not None:
+        overbid = preempt_overbid_allowance(vulnerability)
         return BidRecommendation(
             preempt,
-            f"{hcp} HCP，持有长套，符合当前简化阻击叫条件，开叫 {preempt}。牌型：{length_text}。",
+            with_opening_principle(
+                (
+                    f"你有 {hcp} HCP，持有 7 张以上长套，应按套长作 3/4/5 阶阻击，"
+                    f"并遵循有局宕二无局宕三（本次可宕 {overbid}），因此开叫 {preempt}。"
+                    f"牌型：{length_text}。"
+                ),
+                "阻击开叫",
+            ),
             "阻击开叫",
         )
 
     weak_two = (
-        choose_weak_two(lengths, hcp, evaluation.top_honors_by_suit)
+        choose_weak_two(lengths, hcp, evaluation.top_honors_by_suit, vulnerability)
         if settings.weak_two_enabled
         else None
     )
     if weak_two is not None:
         six_card_suits = [suit for suit in ["S", "H", "D", "C"] if lengths[suit] == 6]
+        overbid = preempt_overbid_allowance(vulnerability)
         if len(six_card_suits) >= 2:
             return BidRecommendation(
                 f"2{suit_symbol(weak_two)}",
-                (
-                    f"{hcp} HCP，6-6 双套，按套质量开叫二阶 {SUIT_NAMES[weak_two]}。"
-                    f"当前训练不使用弱 2♣。牌型：{length_text}。"
+                with_opening_principle(
+                    (
+                        f"你有 {hcp} HCP，6-6 双套，应按套质量选择二阶弱二，并遵循有局宕二无局宕三"
+                        f"（本次可宕 {overbid}），因此开叫 2{suit_symbol(weak_two)}。"
+                        f"当前训练不使用弱 2♣。牌型：{length_text}。"
+                    ),
+                    "6-6 双套弱二",
                 ),
                 "6-6 双套弱二",
             )
         return BidRecommendation(
             f"2{suit_symbol(weak_two)}",
-            f"{hcp} HCP，持有 6 张 {SUIT_NAMES[weak_two]}，可作二阶弱二开叫。当前训练不使用弱 2♣。牌型：{length_text}。",
+            with_opening_principle(
+                (
+                    f"你有 {hcp} HCP，持有 {lengths[weak_two]} 张 {SUIT_NAMES[weak_two]}，"
+                    f"可作二阶弱二，并遵循有局宕二无局宕三（本次可宕 {overbid}），"
+                    f"因此开叫 2{suit_symbol(weak_two)}。当前训练不使用弱 2♣。牌型：{length_text}。"
+                ),
+                "弱二开叫",
+            ),
             "弱二开叫",
         )
 
     return BidRecommendation(
         "Pass",
-        f"{hcp} HCP，未达到正常开叫条件，也不符合当前弱二规则，建议 Pass。牌型：{length_text}。",
+        with_opening_principle(
+            (
+                f"你有 {hcp} HCP，未达到正常开叫、轻开叫、拼搏式 3NT 或弱二/阻击条件，"
+                f"应 Pass。牌型：{length_text}。"
+            ),
+            "不叫",
+        ),
         "不叫",
     )
 
@@ -1871,6 +2045,55 @@ def has_suit_stopper(evaluation: HandEvaluation, suit: str) -> bool:
     return evaluation.lengths[suit] >= 2 and evaluation.top_honors_by_suit.get(suit, 0) >= 1
 
 
+SEMI_BALANCED_SHAPES = {(5, 4, 2, 2), (6, 3, 2, 2)}
+
+
+def is_semi_balanced_shape(lengths: dict[str, int]) -> bool:
+    sorted_shape = tuple(sorted(lengths.values(), reverse=True))
+    return sorted_shape in SEMI_BALANCED_SHAPES
+
+
+def has_stoppers_in_all_suits(evaluation: HandEvaluation) -> bool:
+    return all(has_suit_stopper(evaluation, suit) for suit in ["S", "H", "D", "C"])
+
+
+def qualifies_for_nt_opening_shape(evaluation: HandEvaluation) -> bool:
+    """均型，或准均型（5422/6322）且门门有止；6 张高花不按无将开叫。"""
+    if evaluation.balanced:
+        return True
+    lengths = evaluation.lengths
+    if lengths["S"] >= 6 or lengths["H"] >= 6:
+        return False
+    return is_semi_balanced_shape(lengths) and has_stoppers_in_all_suits(evaluation)
+
+
+def preempt_overbid_allowance(vulnerability: str | None) -> int:
+    """阻击叫：有局宕二，无局宕三。"""
+    return 2 if ns_is_vulnerable(vulnerability) else 3
+
+
+def estimate_long_suit_playing_tricks(length: int) -> int:
+    """弱牌长套预期赢墩：约套长减一。"""
+    return max(0, length - 1)
+
+
+def max_preempt_level_for_suit(
+    length: int,
+    vulnerability: str | None,
+    suit: str,
+) -> int | None:
+    """按有局宕二无局宕三计算该长套最高阻击阶数；不足二阶则返回 None。"""
+    if length < 6:
+        return None
+    target_tricks = estimate_long_suit_playing_tricks(length) + preempt_overbid_allowance(vulnerability)
+    level = target_tricks - 6
+    if level < 2:
+        return None
+    if suit in {"S", "H"}:
+        return min(level, 4)
+    return min(level, 5)
+
+
 def recommend_response_to_gambling_3nt(
     evaluation: HandEvaluation,
     settings: RuleSettings | None = None,
@@ -2425,11 +2648,17 @@ def choose_weak_two(
     lengths: dict[str, int],
     hcp: int,
     top_honors_by_suit: dict[str, int] | None = None,
+    vulnerability: str | None = None,
 ) -> str | None:
     if not 6 <= hcp <= 10:
         return None
     # 当前训练不使用弱 2♣；6-6 双套在可开弱二花色中按质量（A/K/Q 张数）选择。
-    candidates = [suit for suit in ["S", "H", "D"] if lengths[suit] >= 6]
+    # 有局宕二无局宕三：仅当该套至少可叫到二阶时才开弱二。
+    candidates = [
+        suit
+        for suit in ["S", "H", "D"]
+        if lengths[suit] >= 6 and max_preempt_level_for_suit(lengths[suit], vulnerability, suit) is not None
+    ]
     if not candidates:
         return None
     honors = top_honors_by_suit or {}
@@ -2439,18 +2668,25 @@ def choose_weak_two(
     )
 
 
-def choose_preempt_opening(lengths: dict[str, int], hcp: int) -> str | None:
+def choose_preempt_opening(
+    lengths: dict[str, int],
+    hcp: int,
+    vulnerability: str | None = None,
+) -> str | None:
+    """7+ 长套阻击：按套长与有局宕二无局宕三定阶；二阶交由弱二处理。"""
     if not 5 <= hcp <= 10:
         return None
-    suit = max(["S", "H", "D", "C"], key=lambda candidate: (lengths[candidate], candidate == "S", candidate == "H"))
+    suit = max(
+        ["S", "H", "D", "C"],
+        key=lambda candidate: (lengths[candidate], candidate == "S", candidate == "H"),
+    )
     length = lengths[suit]
-    if length >= 8 and suit in {"C", "D"} and hcp >= 8:
-        return f"5{suit_symbol(suit)}"
-    if length >= 8:
-        return f"4{suit_symbol(suit)}"
-    if length >= 7:
-        return f"3{suit_symbol(suit)}"
-    return None
+    if length < 7:
+        return None
+    level = max_preempt_level_for_suit(length, vulnerability, suit)
+    if level is None or level < 3:
+        return None
+    return f"{level}{suit_symbol(suit)}"
 
 
 def choose_gambling_3nt_minor(

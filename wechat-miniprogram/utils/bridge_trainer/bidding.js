@@ -244,54 +244,65 @@ function recommend_opening(evaluation, settings, vulnerability) {
   const lengths = evaluation.lengths;
   const length_text = describe_lengths(evaluation);
 
+  function finish(rec) {
+    rec.explanation = with_opening_principle(rec.explanation, rec.rule_name);
+    return rec;
+  }
+
   if (hcp >= settings.strong_two_club_min) {
-    return bidRecommendation(
+    return finish(bidRecommendation(
       "2♣",
       `${hcp} HCP，达到当前设置的强 2♣ 下限 ${settings.strong_two_club_min} HCP。牌型：${length_text}。`,
       "强 2♣",
-    );
+    ));
   }
 
-  if (evaluation.balanced && hcp >= 20 && hcp <= 21) {
-    return bidRecommendation(
+  if (qualifies_for_nt_opening_shape(evaluation) && hcp >= 20 && hcp <= 21) {
+    const shapeText = evaluation.balanced ? "均型" : "准均型且门门有止";
+    return finish(bidRecommendation(
       "2NT",
-      `${hcp} HCP 且均型，符合 20-21 均型 2NT 开叫。牌型：${length_text}。`,
+      `${hcp} HCP 且${shapeText}，符合 20-21 无将开叫。牌型：${length_text}。`,
       "20-21 均型 2NT",
-    );
+    ));
   }
 
-  if (evaluation.balanced && hcp >= settings.one_nt_min && hcp <= settings.one_nt_max) {
+  if (
+    qualifies_for_nt_opening_shape(evaluation) &&
+    hcp >= settings.one_nt_min &&
+    hcp <= settings.one_nt_max
+  ) {
+    const shapeText = evaluation.balanced ? "均型" : "准均型且门门有止";
     const secondary = one_nt_secondary_major_opening_bid(lengths);
     if (secondary !== null) {
-      return bidRecommendation(
+      return finish(bidRecommendation(
         "1NT",
-        `${hcp} HCP 且均型，优先开叫 1NT；持有 5 张高花时，开叫 ${secondary} 为次优。牌型：${length_text}。`,
+        `${hcp} HCP 且${shapeText}，优先开叫 1NT；持有 5 张高花时，开叫 ${secondary} 为次优。牌型：${length_text}。`,
         `${settings.one_nt_min}-${settings.one_nt_max} 均型 1NT`,
-      );
+      ));
     }
-    return bidRecommendation(
+    return finish(bidRecommendation(
       "1NT",
-      `${hcp} HCP 且均型，符合当前设置的 ${settings.one_nt_min}-${settings.one_nt_max} 均型 1NT 开叫。牌型：${length_text}。`,
+      `${hcp} HCP 且${shapeText}，符合当前设置的 ${settings.one_nt_min}-${settings.one_nt_max} 无将开叫。牌型：${length_text}。`,
       `${settings.one_nt_min}-${settings.one_nt_max} 均型 1NT`,
-    );
+    ));
   }
 
   if (hcp >= settings.opening_min_hcp && (lengths.S >= 5 || lengths.H >= 5)) {
     const suit = choose_major_opening(lengths);
-    return bidRecommendation(
+    return finish(bidRecommendation(
       `1${suit_symbol(suit)}`,
       `${hcp} HCP，达到当前一阶开叫下限 ${settings.opening_min_hcp} HCP，持有 5 张以上高花，应优先开叫高花。选择 ${SUIT_NAMES[suit]}，牌型：${length_text}。`,
       "五张高花开叫",
-    );
+    ));
   }
 
   if (hcp >= settings.opening_min_hcp) {
     const suit = choose_minor_opening(lengths);
-    return bidRecommendation(
+    return finish(bidRecommendation(
       `1${suit_symbol(suit)}`,
       `${hcp} HCP，达到当前一阶开叫下限 ${settings.opening_min_hcp} HCP，没有 5 张高花，按较长低花/Better Minor 原则开叫 ${SUIT_NAMES[suit]}。牌型：${length_text}。`,
       "低花开叫",
-    );
+    ));
   }
 
   if (hcp === 11) {
@@ -299,63 +310,65 @@ function recommend_opening(evaluation, settings, vulnerability) {
     if (lightSuit !== null) {
       const secondary = eleven_hcp_secondary_opening_bid(lengths, lightSuit);
       if (secondary !== null) {
-        return bidRecommendation(
+        return finish(bidRecommendation(
           `1${suit_symbol(lightSuit)}`,
           `${hcp} HCP，双套轻开叫优先开较短高花 1${suit_symbol(lightSuit)}；开叫较长低花 ${secondary} 为次优。牌型：${length_text}。`,
           "11 点轻开叫",
-        );
+        ));
       }
-      return bidRecommendation(
+      return finish(bidRecommendation(
         `1${suit_symbol(lightSuit)}`,
         `${hcp} HCP，符合轻开叫条件，开叫 1${suit_symbol(lightSuit)}。牌型：${length_text}。`,
         "11 点轻开叫",
-      );
+      ));
     }
   }
 
   // 拼搏式 3NT：7+ 坚固低花（含 AKQ），边张无 A/K/Q；优先于同档阻击叫。
   const gambling_minor = choose_gambling_3nt_minor(evaluation, settings.opening_min_hcp);
   if (gambling_minor !== null) {
-    return bidRecommendation(
+    return finish(bidRecommendation(
       "3NT",
       `${hcp} HCP，持有 ${lengths[gambling_minor]} 张坚固 ${SUIT_NAMES[gambling_minor]}（含 AKQ），边张无大牌，开叫拼搏式 3NT。牌型：${length_text}。`,
       "拼搏式 3NT",
-    );
+    ));
   }
 
-  const preempt = settings.weak_two_enabled ? choose_preempt_opening(lengths, hcp) : null;
+  const preempt = settings.weak_two_enabled ? choose_preempt_opening(lengths, hcp, vulnerability) : null;
   if (preempt !== null) {
-    return bidRecommendation(
+    const overbid = preempt_overbid_allowance(vulnerability);
+    return finish(bidRecommendation(
       preempt,
-      `${hcp} HCP，持有长套，符合当前简化阻击叫条件，开叫 ${preempt}。牌型：${length_text}。`,
+      `${hcp} HCP，持有长套，按有局宕二无局宕三（本次可宕 ${overbid}）开叫阻击 ${preempt}。牌型：${length_text}。`,
       "阻击开叫",
-    );
+    ));
   }
 
   const weak_two = settings.weak_two_enabled
-    ? choose_weak_two(lengths, hcp, evaluation.top_honors_by_suit)
+    ? choose_weak_two(lengths, hcp, evaluation.top_honors_by_suit, vulnerability)
     : null;
   if (weak_two !== null) {
     const sixCardSuits = ["S", "H", "D", "C"].filter((suit) => lengths[suit] === 6);
+    const overbid = preempt_overbid_allowance(vulnerability);
     if (sixCardSuits.length >= 2) {
-      return bidRecommendation(
+      return finish(bidRecommendation(
         `2${suit_symbol(weak_two)}`,
-        `${hcp} HCP，6-6 双套，按套质量开叫二阶 ${SUIT_NAMES[weak_two]}。当前训练不使用弱 2♣。牌型：${length_text}。`,
+        `${hcp} HCP，6-6 双套，按套质量并遵循有局宕二无局宕三（本次可宕 ${overbid}）开叫二阶 ${SUIT_NAMES[weak_two]}。当前训练不使用弱 2♣。牌型：${length_text}。`,
         "6-6 双套弱二",
-      );
+      ));
     }
-    return bidRecommendation(
+    return finish(bidRecommendation(
       `2${suit_symbol(weak_two)}`,
-      `${hcp} HCP，持有 6 张 ${SUIT_NAMES[weak_two]}，可作二阶弱二开叫。当前训练不使用弱 2♣。牌型：${length_text}。`,
+      `${hcp} HCP，持有 ${lengths[weak_two]} 张 ${SUIT_NAMES[weak_two]}，按有局宕二无局宕三（本次可宕 ${overbid}）作二阶弱二开叫。当前训练不使用弱 2♣。牌型：${length_text}。`,
       "弱二开叫",
-    );
+    ));
   }
 
-  return bidRecommendation(
+  return finish(bidRecommendation(
     "Pass",
     `${hcp} HCP，未达到正常开叫条件，也不符合当前弱二规则，建议 Pass。牌型：${length_text}。`,
     "不叫",
-  );
+  ));
 }
 
 function recommend_response(opener_bid, evaluation, settings, vulnerability, overcall_bid) {
@@ -2200,6 +2213,103 @@ function has_suit_stopper(evaluation, suit) {
   return evaluation.lengths[suit] >= 2 && (evaluation.top_honors_by_suit[suit] || 0) >= 1;
 }
 
+const SEMI_BALANCED_SHAPES = new Set(["5-4-2-2", "6-3-2-2"]);
+
+function shapeKeyFromLengths(lengths) {
+  return Object.values(lengths)
+    .slice()
+    .sort((a, b) => b - a)
+    .join("-");
+}
+
+function is_semi_balanced_shape(lengths) {
+  return SEMI_BALANCED_SHAPES.has(shapeKeyFromLengths(lengths));
+}
+
+function has_stoppers_in_all_suits(evaluation) {
+  return ["S", "H", "D", "C"].every((suit) => has_suit_stopper(evaluation, suit));
+}
+
+function qualifies_for_nt_opening_shape(evaluation) {
+  if (evaluation.balanced) {
+    return true;
+  }
+  const lengths = evaluation.lengths;
+  if (lengths.S >= 6 || lengths.H >= 6) {
+    return false;
+  }
+  return is_semi_balanced_shape(lengths) && has_stoppers_in_all_suits(evaluation);
+}
+
+const OPENING_RULE_PRINCIPLES = {
+  "强 2♣": "开叫训练原则第1条：22+ HCP（或达到设置的强 2♣ 下限）开叫 2♣。",
+  "20-21 均型 2NT":
+    "开叫训练原则第2条：20-21 HCP 且均型或准均型门门有止（可能有5张高花/6张低花套）开叫 2NT。",
+  "均型 1NT":
+    "开叫训练原则第3条：15-17 HCP（可设置）且均型或准均型门门有止（可能有5张高花/6张低花套）开叫 1NT；如有5张高花，开叫一阶高花为次优。",
+  "五张高花开叫": "开叫训练原则第4条：12+ HCP 且有5张以上高花，开叫较长高花；5-5 高花优先 1♠。",
+  "低花开叫": "开叫训练原则第5条：12+ HCP 无5张高花，按较长低花开叫；3-3 低花开 1♣，4-4 低花开 1♦。",
+  "11 点轻开叫":
+    "开叫训练原则第6/7条：11 HCP 时，6+ 长套且有单缺开该长套；或 5-5 以上双套（等长开较高花色；高花短于低花时优先较短高花，较长低花为次优）。",
+  "拼搏式 3NT":
+    "开叫训练原则第8条：7张以上坚固低花（含 AKQ），边张无 A/K/Q，且未达一阶开叫点力时开拼搏式 3NT（优先于同档阻击）。",
+  "阻击开叫":
+    "开叫训练原则第9条：5-10 HCP 且7张以上长套，按套长作 3/4/5 阶阻击，并遵循有局宕二、无局宕三。",
+  "弱二开叫":
+    "开叫训练原则第10条：6-10 HCP 且6张以上套，二阶弱二开 2♦/2♥/2♠（不使用弱 2♣），并遵循有局宕二、无局宕三。",
+  "6-6 双套弱二": "开叫训练原则第11条：6-10 HCP 且6-6双套，开二阶质量最好的套。",
+  "不叫": "开叫训练原则第12条：不满足以上开叫条件时 Pass。",
+};
+
+function lookup_opening_principle(rule_name) {
+  if (!rule_name) {
+    return null;
+  }
+  if (OPENING_RULE_PRINCIPLES[rule_name]) {
+    return OPENING_RULE_PRINCIPLES[rule_name];
+  }
+  const keys = Object.keys(OPENING_RULE_PRINCIPLES);
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[i];
+    if (rule_name.length >= key.length && rule_name.slice(-key.length) === key) {
+      return OPENING_RULE_PRINCIPLES[key];
+    }
+  }
+  return null;
+}
+
+function with_opening_principle(explanation, rule_name) {
+  const principle = lookup_opening_principle(rule_name);
+  if (!principle) {
+    return explanation;
+  }
+  return explanation + "\n\n依据原则：" + principle;
+}
+
+
+function preempt_overbid_allowance(vulnerability) {
+  return ns_is_vulnerable(vulnerability) ? 2 : 3;
+}
+
+function estimate_long_suit_playing_tricks(length) {
+  return Math.max(0, length - 1);
+}
+
+function max_preempt_level_for_suit(length, vulnerability, suit) {
+  if (length < 6) {
+    return null;
+  }
+  const targetTricks = estimate_long_suit_playing_tricks(length) + preempt_overbid_allowance(vulnerability);
+  let level = targetTricks - 6;
+  if (level < 2) {
+    return null;
+  }
+  if (suit === "S" || suit === "H") {
+    return Math.min(level, 4);
+  }
+  return Math.min(level, 5);
+}
+
 function recommend_response_to_gambling_3nt(evaluation, settings) {
   // 拼搏式 3NT 应叫：Pass 打无将；4♣ Pass or correct；4♦ 问单缺；4M 自有高花成局。
   settings = settings || defaultRuleSettings();
@@ -2819,33 +2929,33 @@ function choose_minor_opening(lengths) {
   return "D";
 }
 
-function choose_weak_two(lengths, hcp, topHonorsBySuit) {
+function choose_weak_two(lengths, hcp, topHonorsBySuit, vulnerability) {
   if (!(hcp >= 6 && hcp <= 10)) {
     return null;
   }
-  const candidates = ["S", "H", "D"].filter((suit) => lengths[suit] >= 6);
+  const candidates = ["S", "H", "D"].filter(
+    (suit) => lengths[suit] >= 6 && max_preempt_level_for_suit(lengths[suit], vulnerability, suit) !== null,
+  );
   if (!candidates.length) {
     return null;
   }
   return maxWeakTwoCandidate(candidates, lengths, topHonorsBySuit);
 }
 
-function choose_preempt_opening(lengths, hcp) {
+function choose_preempt_opening(lengths, hcp, vulnerability) {
   if (!(hcp >= 5 && hcp <= 10)) {
     return null;
   }
   const suit = maxPreemptCandidate(lengths);
   const length = lengths[suit];
-  if (length >= 8 && ["C", "D"].includes(suit) && hcp >= 8) {
-    return `5${suit_symbol(suit)}`;
+  if (length < 7) {
+    return null;
   }
-  if (length >= 8) {
-    return `4${suit_symbol(suit)}`;
+  const level = max_preempt_level_for_suit(length, vulnerability, suit);
+  if (level === null || level < 3) {
+    return null;
   }
-  if (length >= 7) {
-    return `3${suit_symbol(suit)}`;
-  }
-  return null;
+  return `${level}${suit_symbol(suit)}`;
 }
 
 function choose_gambling_3nt_minor(evaluation, opening_min_hcp) {
@@ -2944,6 +3054,8 @@ module.exports = {
   recommend_response_to_1nt,
   recommend_response_to_2nt,
   has_suit_stopper,
+  qualifies_for_nt_opening_shape,
+  preempt_overbid_allowance,
   recommend_response_to_gambling_3nt,
   get_splinter_bid,
   find_splinter_suit,

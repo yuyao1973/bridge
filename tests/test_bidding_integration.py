@@ -195,7 +195,7 @@ class OneNtTransferIntegrationTests(unittest.TestCase):
         self.settings = RuleSettings()
 
     def test_heart_transfer_game_via_training_layer(self) -> None:
-        # 开叫 16 HCP 1NT；应叫 10 HCP 6 张红心 → 转移 2♦，进局 4♥
+        # 开叫 16 HCP 1NT；应叫 10 HCP 5 张红心 → Jacoby 2♦，转移完成后进 3NT
         opener_hand = make_hand([
             ("S","A"),("S","Q"),("S","5"),
             ("H","K"),("H","J"),("H","6"),
@@ -203,8 +203,8 @@ class OneNtTransferIntegrationTests(unittest.TestCase):
             ("C","J"),("C","9"),("C","3"),
         ])
         responder_hand = make_hand([
-            ("S","8"),("S","4"),
-            ("H","A"),("H","Q"),("H","10"),("H","9"),("H","8"),("H","7"),
+            ("S","8"),("S","4"),("S","3"),
+            ("H","A"),("H","Q"),("H","10"),("H","9"),("H","8"),
             ("D","K"),("D","5"),
             ("C","J"),("C","4"),("C","3"),
         ])
@@ -217,12 +217,12 @@ class OneNtTransferIntegrationTests(unittest.TestCase):
         self.assertEqual(opening.bid, "1NT")
         self.assertEqual(response.bid, "2♦")
         self.assertEqual(opener_rebid.bid, "2♥")
-        self.assertEqual(responder_rebid.bid, "4♥")
+        self.assertEqual(responder_rebid.bid, "3NT")
         with patch("bridge_trainer.training.deal", return_value={"N": opener_hand, "E": [], "S": responder_hand, "W": []}):
             question = generate_responder_rebid_question(seed=0, settings=self.settings, opener_bid="1NT")
         self.assertEqual(question.response_bid, "2♦")
         self.assertEqual(question.opener_rebid_bid, "2♥")
-        self.assertEqual(question.recommendation.bid, "4♥")
+        self.assertEqual(question.recommendation.bid, "3NT")
         self.assertTrue(question.auction.startswith("1NT-Pass-2♦-Pass-2♥-Pass-?"))
 
     def test_spade_transfer_invite_via_training_layer(self) -> None:

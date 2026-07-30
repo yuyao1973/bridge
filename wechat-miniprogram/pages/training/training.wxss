@@ -359,6 +359,11 @@
   border-left: 10rpx solid #198754;
 }
 
+.feedback-explanation {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .feedback.bad,
 .error-card {
   border-left: 10rpx solid #dc3545;

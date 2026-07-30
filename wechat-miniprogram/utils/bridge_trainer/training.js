@@ -12,6 +12,7 @@ const {
   legal_responder_rebid_bids,
   one_nt_secondary_major_opening_bid,
   parse_contract_bid,
+  qualifies_for_nt_opening_shape,
   recommend_opening,
   recommend_opener_rebid,
   recommend_responder_rebid,
@@ -98,11 +99,14 @@ function createTrainingQuestion(fields) {
 }
 
 function isBalancedNtOpening(evaluation, settings, ntLevel) {
+  if (!qualifies_for_nt_opening_shape(evaluation)) {
+    return false
+  }
   if (ntLevel === 1) {
-    return evaluation.balanced && settings.one_nt_min <= evaluation.hcp && evaluation.hcp <= settings.one_nt_max
+    return settings.one_nt_min <= evaluation.hcp && evaluation.hcp <= settings.one_nt_max
   }
   if (ntLevel === 2) {
-    return evaluation.balanced && evaluation.hcp >= 20 && evaluation.hcp <= 21
+    return evaluation.hcp >= 20 && evaluation.hcp <= 21
   }
   return false
 }
@@ -335,27 +339,44 @@ function getSequenceConstraints(openerBid, responseBid, openerRebidBid, settings
 
   function nt1(hand) {
     const ev = evaluate_hand(hand)
-    return ev.balanced && settings.one_nt_min <= ev.hcp && ev.hcp <= settings.one_nt_max
+    return qualifies_for_nt_opening_shape(ev) && settings.one_nt_min <= ev.hcp && ev.hcp <= settings.one_nt_max
   }
 
   function nt1NoMajor(hand) {
     const ev = evaluate_hand(hand)
-    return ev.balanced && settings.one_nt_min <= ev.hcp && ev.hcp <= settings.one_nt_max && ev.lengths.H < 4 && ev.lengths.S < 4
+    return (
+      qualifies_for_nt_opening_shape(ev) &&
+      settings.one_nt_min <= ev.hcp &&
+      ev.hcp <= settings.one_nt_max &&
+      ev.lengths.H < 4 &&
+      ev.lengths.S < 4
+    )
   }
 
   function nt1FourHearts(hand) {
     const ev = evaluate_hand(hand)
-    return ev.balanced && settings.one_nt_min <= ev.hcp && ev.hcp <= settings.one_nt_max && ev.lengths.H >= 4
+    return (
+      qualifies_for_nt_opening_shape(ev) &&
+      settings.one_nt_min <= ev.hcp &&
+      ev.hcp <= settings.one_nt_max &&
+      ev.lengths.H >= 4
+    )
   }
 
   function nt1FourSpadesNoHearts(hand) {
     const ev = evaluate_hand(hand)
-    return ev.balanced && settings.one_nt_min <= ev.hcp && ev.hcp <= settings.one_nt_max && ev.lengths.S >= 4 && ev.lengths.H < 4
+    return (
+      qualifies_for_nt_opening_shape(ev) &&
+      settings.one_nt_min <= ev.hcp &&
+      ev.hcp <= settings.one_nt_max &&
+      ev.lengths.S >= 4 &&
+      ev.lengths.H < 4
+    )
   }
 
   function nt2(hand) {
     const ev = evaluate_hand(hand)
-    return ev.balanced && ev.hcp >= 20 && ev.hcp <= 21
+    return qualifies_for_nt_opening_shape(ev) && ev.hcp >= 20 && ev.hcp <= 21
   }
 
   function staymanResponder(hand) {

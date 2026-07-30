@@ -99,21 +99,33 @@ async def create_question(request: Request) -> JSONResponse:
 
 
 async def check_answer(request: Request) -> JSONResponse:
+    from bridge_trainer.bidding import format_judgment_explanation
+
     payload = await request.json()
     selected_bid = payload.get("selected_bid")
     recommended_bid = payload.get("recommended_bid")
     acceptable_bids = payload.get("acceptable_bids") or [recommended_bid]
+    rule_name = payload.get("rule_name", "")
+    base_explanation = payload.get("explanation", "")
     is_primary = selected_bid == recommended_bid
     is_acceptable = selected_bid in acceptable_bids
     grade = "primary" if is_primary else ("acceptable" if is_acceptable else "incorrect")
+    explanation = format_judgment_explanation(
+        selected_bid=selected_bid,
+        recommended_bid=recommended_bid,
+        grade=grade,
+        base_explanation=base_explanation,
+        rule_name=rule_name,
+        acceptable_bids=acceptable_bids,
+    )
     return JSONResponse(
         {
             "correct": is_acceptable,
             "grade": grade,
             "recommended_bid": recommended_bid,
             "acceptable_bids": acceptable_bids,
-            "explanation": payload.get("explanation", ""),
-            "rule_name": payload.get("rule_name", ""),
+            "explanation": explanation,
+            "rule_name": rule_name,
         }
     )
 

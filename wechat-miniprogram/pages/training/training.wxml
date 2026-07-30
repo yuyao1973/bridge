@@ -98,7 +98,7 @@
     <view wx:if="{{submitted}}" class="card feedback {{answer.correct ? 'ok' : 'bad'}}">
       <view class="section-title">{{feedbackTitle}}</view>
       <view class="recommended-bid-row">推荐叫品：<view class="recommended-bid {{recommendedBidClass}}">{{answer.recommended_bid}}</view></view>
-      <view class="subtitle">{{answer.explanation}}</view>
+      <view class="subtitle feedback-explanation">{{answer.explanation}}</view>
       <view class="rule-name">规则：{{answer.rule_name}}</view>
     </view>
   </view>

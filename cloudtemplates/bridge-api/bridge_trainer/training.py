@@ -20,6 +20,7 @@ from .bidding import (
     legal_responder_rebid_bids,
     one_nt_secondary_major_opening_bid,
     parse_contract_bid,
+    qualifies_for_nt_opening_shape,
     recommend_opening,
     recommend_opener_rebid,
     recommend_responder_rebid,
@@ -97,10 +98,12 @@ class TrainingQuestion:
 
 
 def _is_balanced_nt_opening(evaluation: HandEvaluation, settings: RuleSettings, nt_level: int) -> bool:
+    if not qualifies_for_nt_opening_shape(evaluation):
+        return False
     if nt_level == 1:
-        return evaluation.balanced and settings.one_nt_min <= evaluation.hcp <= settings.one_nt_max
+        return settings.one_nt_min <= evaluation.hcp <= settings.one_nt_max
     if nt_level == 2:
-        return evaluation.balanced and 20 <= evaluation.hcp <= 21
+        return 20 <= evaluation.hcp <= 21
     return False
 
 
@@ -342,23 +345,37 @@ def get_sequence_constraints(
 
     def nt1(hand: Hand) -> bool:
         ev = evaluate_hand(hand)
-        return ev.balanced and settings.one_nt_min <= ev.hcp <= settings.one_nt_max
+        return qualifies_for_nt_opening_shape(ev) and settings.one_nt_min <= ev.hcp <= settings.one_nt_max
 
     def nt1_no_major(hand: Hand) -> bool:
         ev = evaluate_hand(hand)
-        return ev.balanced and settings.one_nt_min <= ev.hcp <= settings.one_nt_max and ev.lengths["H"] < 4 and ev.lengths["S"] < 4
+        return (
+            qualifies_for_nt_opening_shape(ev)
+            and settings.one_nt_min <= ev.hcp <= settings.one_nt_max
+            and ev.lengths["H"] < 4
+            and ev.lengths["S"] < 4
+        )
 
     def nt1_four_hearts(hand: Hand) -> bool:
         ev = evaluate_hand(hand)
-        return ev.balanced and settings.one_nt_min <= ev.hcp <= settings.one_nt_max and ev.lengths["H"] >= 4
+        return (
+            qualifies_for_nt_opening_shape(ev)
+            and settings.one_nt_min <= ev.hcp <= settings.one_nt_max
+            and ev.lengths["H"] >= 4
+        )
 
     def nt1_four_spades_no_hearts(hand: Hand) -> bool:
         ev = evaluate_hand(hand)
-        return ev.balanced and settings.one_nt_min <= ev.hcp <= settings.one_nt_max and ev.lengths["S"] >= 4 and ev.lengths["H"] < 4
+        return (
+            qualifies_for_nt_opening_shape(ev)
+            and settings.one_nt_min <= ev.hcp <= settings.one_nt_max
+            and ev.lengths["S"] >= 4
+            and ev.lengths["H"] < 4
+        )
 
     def nt2(hand: Hand) -> bool:
         ev = evaluate_hand(hand)
-        return ev.balanced and 20 <= ev.hcp <= 21
+        return qualifies_for_nt_opening_shape(ev) and 20 <= ev.hcp <= 21
 
     def stayman_responder(hand: Hand) -> bool:
         ev = evaluate_hand(hand)

@@ -541,18 +541,31 @@ def render_evaluation(question: TrainingQuestion) -> None:
 
 
 def render_feedback(question: TrainingQuestion) -> None:
+    from bridge_trainer.bidding import format_judgment_explanation
+
     recommendation = question.recommendation
     selected = st.session_state.selected_bid
     acceptable = getattr(question, "acceptable_bids", [recommendation.bid])
     if selected == recommendation.bid:
+        grade = "primary"
         st.success(f"✓ 正确：推荐叫品是 {recommendation.bid} （+2 分）")
     elif selected in acceptable:
+        grade = "acceptable"
         alternatives = [bid for bid in acceptable if bid != recommendation.bid]
         alt_text = f"（可接受：{', '.join(alternatives)}）" if alternatives else ""
         st.warning(f"⚠ 可接受次优：你选择了 {selected}，主推仍是 {recommendation.bid}{alt_text} （+1 分）")
     else:
+        grade = "incorrect"
         st.error(f"✗ 不太合适：你选择了 {selected}，推荐叫品是 {recommendation.bid} （0 分）")
-    st.info(recommendation.explanation)
+    explanation = format_judgment_explanation(
+        selected_bid=selected,
+        recommended_bid=recommendation.bid,
+        grade=grade,
+        base_explanation=recommendation.explanation,
+        rule_name=recommendation.rule_name,
+        acceptable_bids=acceptable,
+    )
+    st.info(explanation)
     st.caption(f"规则：{recommendation.rule_name}")
 
 

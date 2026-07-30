@@ -63,8 +63,58 @@ class OpeningRecommendationTests(unittest.TestCase):
     def test_twenty_to_twenty_one_balanced_opens_two_nt(self) -> None:
         self.assertEqual(recommend_opening(evaluation(20, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "2NT")
 
+    def test_twenty_to_twenty_one_semi_balanced_with_stoppers_opens_two_nt(self) -> None:
+        # 5♠-4♥-2♦-2♣ 准均型，门门有止 → 2NT
+        hand = evaluation(
+            20,
+            5,
+            4,
+            2,
+            2,
+            balanced=False,
+            top_honors_by_suit={"S": 1, "H": 1, "D": 1, "C": 1},
+        )
+        self.assertEqual(recommend_opening(hand, vulnerability=VULNERABILITY).bid, "2NT")
+
+    def test_semi_balanced_without_stoppers_does_not_open_nt(self) -> None:
+        hand = evaluation(
+            16,
+            5,
+            4,
+            2,
+            2,
+            balanced=False,
+            top_honors_by_suit={"S": 2, "H": 1, "D": 0, "C": 0},
+        )
+        self.assertEqual(recommend_opening(hand, vulnerability=VULNERABILITY).bid, "1♠")
+
+    def test_six_card_major_semi_balanced_opens_major_not_nt(self) -> None:
+        # 6♥-3-2-2 即使门门有止也不开无将
+        hand = evaluation(
+            16,
+            2,
+            6,
+            3,
+            2,
+            balanced=False,
+            top_honors_by_suit={"S": 1, "H": 1, "D": 1, "C": 1},
+        )
+        self.assertEqual(recommend_opening(hand, vulnerability=VULNERABILITY).bid, "1♥")
+
     def test_balanced_fifteen_to_seventeen_opens_one_nt(self) -> None:
         self.assertEqual(recommend_opening(evaluation(16, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "1NT")
+
+    def test_semi_balanced_six_minor_with_stoppers_opens_one_nt(self) -> None:
+        hand = evaluation(
+            16,
+            2,
+            2,
+            6,
+            3,
+            balanced=False,
+            top_honors_by_suit={"S": 1, "H": 1, "D": 1, "C": 1},
+        )
+        self.assertEqual(recommend_opening(hand, vulnerability=VULNERABILITY).bid, "1NT")
 
     def test_balanced_one_nt_with_five_major_mentions_secondary(self) -> None:
         recommendation = recommend_opening(
@@ -163,6 +213,33 @@ class OpeningRecommendationTests(unittest.TestCase):
 
     def test_three_level_preempt_with_seven_card_suit(self) -> None:
         self.assertEqual(recommend_opening(evaluation(8, 2, 2, 7, 2, balanced=False), vulnerability=VULNERABILITY).bid, "3♦")
+
+    def test_vulnerable_seven_card_opens_weak_two_not_three(self) -> None:
+        # 有局宕二：7 张约 6 墩 → 最高二阶，走弱二
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 2, 7, 2, 2, balanced=False),
+                vulnerability="双方有局",
+            ).bid,
+            "2♥",
+        )
+
+    def test_vulnerable_six_card_does_not_open_weak_two(self) -> None:
+        # 有局宕二：6 张约 5 墩 → 不足二阶，Pass
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 2, 6, 3, 2, balanced=False),
+                vulnerability="双方有局",
+            ).bid,
+            "Pass",
+        )
+
+    def test_nonvulnerable_eight_card_minor_opens_four_not_five(self) -> None:
+        # 无局宕三：8 张约 7 墩 → 四阶（不再因低花特判上五阶）
+        self.assertEqual(
+            recommend_opening(evaluation(8, 2, 1, 2, 8, balanced=False), vulnerability=VULNERABILITY).bid,
+            "4♣",
+        )
 
     def test_gambling_3nt_with_solid_seven_card_minor(self) -> None:
         # AKQxxxx 草花、边张无大牌 → 拼搏式 3NT，优先于 3♣ 阻击

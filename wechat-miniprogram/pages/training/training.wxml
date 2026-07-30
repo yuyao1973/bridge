@@ -33,8 +33,10 @@
 
   <view wx:elif="{{question}}">
     <view class="card">
-      <view class="info-row"><text class="info-label">局况</text><text>{{question.vulnerability}}</text></view>
-      <view class="info-row"><text class="info-label">位置</text><text>{{question.position}}</text></view>
+      <view class="info-row info-row-inline">
+        <view class="info-item"><text class="info-label">局况</text><text>{{question.vulnerability}}</text></view>
+        <view class="info-item"><text class="info-label">位置</text><text>{{question.position}}</text></view>
+      </view>
       <view wx:if="{{mode === 'response' && question.opener_bid}}" class="info-row"><text class="info-label">同伴开叫</text><text>{{question.opener_bid}}</text></view>
       <view wx:if="{{mode === 'opener_rebid' && question.opener_bid}}" class="info-row"><text class="info-label">你的开叫</text><text>{{question.opener_bid}}</text></view>
       <view wx:if="{{mode === 'responder_rebid' && question.opener_bid}}" class="info-row"><text class="info-label">开叫者开叫</text><text>{{question.opener_bid}}</text></view>
@@ -51,13 +53,26 @@
       </view>
     </view>
 
-    <view class="card">
+    <view class="card hand-card">
       <view class="section-title">你的手牌</view>
-      <view wx:for="{{question.hand_lines}}" wx:key="*this" class="hand-line">{{item}}</view>
-      <view class="metrics">
-        <view class="metric"><view class="metric-value">{{question.evaluation.hcp}}</view><view class="metric-label">HCP</view></view>
-        <view class="metric"><view class="metric-value">{{question.evaluation.shape}}</view><view class="metric-label">牌型</view></view>
-        <view class="metric"><view class="metric-value">{{question.evaluation.balanced ? '是' : '否'}}</view><view class="metric-label">均型</view></view>
+      <view class="hand-panel">
+        <view class="hand-lines">
+          <view wx:for="{{question.hand_lines}}" wx:key="*this" class="hand-line">{{item}}</view>
+        </view>
+        <view class="metrics">
+          <view class="metric">
+            <view class="metric-value">{{question.evaluation.hcp}}</view>
+            <view class="metric-label">HCP</view>
+          </view>
+          <view class="metric">
+            <view class="metric-value">{{question.evaluation.shape}}</view>
+            <view class="metric-label">牌型</view>
+          </view>
+          <view class="metric">
+            <view class="metric-value">{{question.evaluation.balanced ? '是' : '否'}}</view>
+            <view class="metric-label">均型</view>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -71,11 +86,13 @@
           </view>
         </block>
       </view>
-      <view class="subtitle">当前选择：{{selectedBid}}</view>
-      <view class="primary-btn {{hoverKey === 'submit' ? 'is-hover' : ''}} {{submitted || !selectedBidLegal ? 'is-disabled' : ''}}" hover-class="primary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="submit" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="submitAnswer">提交答案</view>
-      <view class="secondary-btn {{hoverKey === 'next' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="next" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="loadQuestion">下一题</view>
-      <view class="secondary-btn {{hoverKey === 'stats' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="stats" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="showScoreStats">统计分数</view>
-      <view class="secondary-btn {{hoverKey === 'clear' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="clear" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="clearScoreStats">清空统计</view>
+      <view class="subtitle selected-bid-line">当前选择：{{selectedBid}}</view>
+      <view class="action-row">
+        <view class="action-btn primary-btn {{hoverKey === 'submit' ? 'is-hover' : ''}} {{submitted || !selectedBidLegal ? 'is-disabled' : ''}}" hover-class="primary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="submit" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="submitAnswer">提交答案</view>
+        <view class="action-btn secondary-btn {{hoverKey === 'next' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="next" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="loadQuestion">下一题</view>
+        <view class="action-btn secondary-btn {{hoverKey === 'stats' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="stats" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="showScoreStats">统计分数</view>
+        <view class="action-btn secondary-btn {{hoverKey === 'clear' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="clear" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="clearScoreStats">清空统计</view>
+      </view>
     </view>
 
     <view wx:if="{{submitted}}" class="card feedback {{answer.correct ? 'ok' : 'bad'}}">

@@ -38,8 +38,22 @@
   font-size: 28rpx;
 }
 
+.info-row-inline {
+  gap: 24rpx;
+}
+
+.info-row-inline .info-item {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  min-width: 0;
+}
+
 .info-label {
   color: #667085;
+  flex-shrink: 0;
 }
 
 .auction {
@@ -108,36 +122,85 @@
   color: #98a2b3;
 }
 
+.hand-card .section-title {
+  margin-bottom: 12rpx;
+}
+
+.hand-panel {
+  display: flex;
+  align-items: stretch;
+  gap: 16rpx;
+}
+
+.hand-lines {
+  flex: 1;
+  min-width: 0;
+}
+
 .hand-line {
-  font-size: 36rpx;
+  font-size: 34rpx;
   font-weight: 600;
-  padding: 10rpx 0;
+  padding: 6rpx 0;
+  line-height: 1.35;
 }
 
 .metrics {
   display: flex;
-  gap: 14rpx;
-  margin-top: 20rpx;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 0 0 148rpx;
+  gap: 8rpx;
 }
 
 .metric {
   flex: 1;
-  padding: 18rpx;
-  border-radius: 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8rpx 6rpx;
+  border-radius: 12rpx;
   background: #f2f4f7;
   text-align: center;
 }
 
 .metric-value {
-  font-size: 30rpx;
+  font-size: 26rpx;
   font-weight: 700;
   color: #0f5132;
+  line-height: 1.2;
+  word-break: break-all;
 }
 
 .metric-label {
-  margin-top: 8rpx;
+  margin-top: 4rpx;
   color: #667085;
-  font-size: 24rpx;
+  font-size: 20rpx;
+  line-height: 1.2;
+}
+
+.selected-bid-line {
+  margin-top: 10rpx;
+  margin-bottom: 0;
+  font-size: 26rpx;
+}
+
+.action-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8rpx;
+  margin-top: 12rpx;
+}
+
+.action-row .action-btn {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+  padding: 14rpx 4rpx;
+  border-radius: 12rpx;
+  font-size: 22rpx;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .bid-grid {

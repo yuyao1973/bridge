@@ -980,6 +980,42 @@ def recommend_opener_rebid(
                 "简单加叫后邀请",
             )
 
+    # 一阶高花开叫后同伴直接跳到 4M：关煞叫（弱牌+长将牌），开叫者通常止叫。
+    if (
+        opening_level == 1
+        and opening_strain in {"♥", "♠"}
+        and response_contract is not None
+        and response_contract[0] == 4
+        and response_contract[1] == opening_strain
+    ):
+        return BidRecommendation(
+            "Pass",
+            f"同伴以 {response_bid} 作高花关煞加叫，已成局且示弱；你有 {hcp} HCP，没有额外牌力继续试探满贯，建议止叫 Pass。牌型：{length_text}。",
+            "关煞加叫后止叫",
+        )
+
+    # 一阶高花开叫后同伴跳加叫到 3M：多为弱支持跳加；最低限止叫，有额外牌力再进局。
+    if (
+        opening_level == 1
+        and opening_strain in {"♥", "♠"}
+        and response_contract is not None
+        and response_contract[0] == 3
+        and response_contract[1] == opening_strain
+    ):
+        if hcp <= 15:
+            return BidRecommendation(
+                "Pass",
+                f"同伴跳加叫到 {response_bid} 多为弱支持；你有 {hcp} HCP 属于最低限，建议止叫 Pass。牌型：{length_text}。",
+                "弱跳加叫后最低限止叫",
+            )
+        game_bid = f"4{opening_strain}"
+        if is_legal_response_bid(response_bid, game_bid):
+            return BidRecommendation(
+                game_bid,
+                f"同伴跳加叫到 {response_bid}；你有 {hcp} HCP 具备额外牌力，进局 {game_bid}。牌型：{length_text}。",
+                "弱跳加叫后进局",
+            )
+
     # 低花反加叫未开启时的 1m-2m：按牌力选择 Pass / 2M / 2NT / 3NT / 3m。
     if (
         not settings.inverted_minors_enabled
@@ -1157,7 +1193,8 @@ def recommend_opener_rebid(
             "低花限制加叫后止叫",
         )
 
-    if response_suit in {"H", "S"} and lengths[response_suit] >= 4:
+    # 仅支持同伴新叫出的高花；若同伴已加叫开叫者高花，由上方专用分支处理。
+    if response_suit in {"H", "S"} and lengths[response_suit] >= 4 and response_suit != opener_suit:
         level = choose_raise_level(response_level, raise_hcp)
         bid = f"{level}{suit_symbol(response_suit)}"
         return BidRecommendation(

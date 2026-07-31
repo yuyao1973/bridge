@@ -1006,6 +1006,46 @@ function recommend_opener_rebid(opening_bid, response_bid, evaluation, settings,
     }
   }
 
+  // 一阶高花开叫后同伴直接跳到 4M：关煞叫（弱牌+长将牌），开叫者通常止叫。
+  if (
+    opening_level === 1 &&
+    ["♥", "♠"].includes(opening_strain) &&
+    response_contract !== null &&
+    response_contract[0] === 4 &&
+    response_contract[1] === opening_strain
+  ) {
+    return bidRecommendation(
+      "Pass",
+      `同伴以 ${response_bid} 作高花关煞加叫，已成局且示弱；你有 ${hcp} HCP，没有额外牌力继续试探满贯，建议止叫 Pass。牌型：${length_text}。`,
+      "关煞加叫后止叫",
+    );
+  }
+
+  // 一阶高花开叫后同伴跳加叫到 3M：多为弱支持跳加；最低限止叫，有额外牌力再进局。
+  if (
+    opening_level === 1 &&
+    ["♥", "♠"].includes(opening_strain) &&
+    response_contract !== null &&
+    response_contract[0] === 3 &&
+    response_contract[1] === opening_strain
+  ) {
+    if (hcp <= 15) {
+      return bidRecommendation(
+        "Pass",
+        `同伴跳加叫到 ${response_bid} 多为弱支持；你有 ${hcp} HCP 属于最低限，建议止叫 Pass。牌型：${length_text}。`,
+        "弱跳加叫后最低限止叫",
+      );
+    }
+    const game_bid = `4${opening_strain}`;
+    if (is_legal_response_bid(response_bid, game_bid)) {
+      return bidRecommendation(
+        game_bid,
+        `同伴跳加叫到 ${response_bid}；你有 ${hcp} HCP 具备额外牌力，进局 ${game_bid}。牌型：${length_text}。`,
+        "弱跳加叫后进局",
+      );
+    }
+  }
+
   // 低花反加叫未开启时的 1m-2m：按牌力选择 Pass / 2M / 2NT / 3NT / 3m。
   if (
     !settings.inverted_minors_enabled &&
@@ -1194,7 +1234,8 @@ function recommend_opener_rebid(opening_bid, response_bid, evaluation, settings,
     );
   }
 
-  if (["H", "S"].includes(response_suit) && lengths[response_suit] >= 4) {
+  // 仅支持同伴新叫出的高花；若同伴已加叫开叫者高花，由上方专用分支处理。
+  if (["H", "S"].includes(response_suit) && lengths[response_suit] >= 4 && response_suit !== opener_suit) {
     const level = choose_raise_level(response_level, raise_hcp);
     const bid = `${level}${suit_symbol(response_suit)}`;
     return bidRecommendation(

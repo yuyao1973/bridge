@@ -926,6 +926,24 @@ class RebidRecommendationTests(unittest.TestCase):
         self.assertEqual(result.bid, "Pass")
         self.assertEqual(result.rule_name, "简单加叫后最低限止叫")
 
+    def test_opener_rebid_after_shutout_major_raise_passes(self) -> None:
+        hand = evaluation(13, 2, 5, 2, 4, balanced=False)
+        result = recommend_opener_rebid("1♥", "4♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "关煞加叫后止叫")
+
+    def test_opener_rebid_after_weak_jump_major_raise_with_minimum_passes(self) -> None:
+        hand = evaluation(13, 2, 5, 3, 3, balanced=False)
+        result = recommend_opener_rebid("1♥", "3♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "弱跳加叫后最低限止叫")
+
+    def test_opener_rebid_after_weak_jump_major_raise_with_extras_goes_game(self) -> None:
+        hand = evaluation(16, 2, 5, 3, 3, balanced=False)
+        result = recommend_opener_rebid("1♠", "3♠", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♠")
+        self.assertEqual(result.rule_name, "弱跳加叫后进局")
+
     def test_opener_rebid_balanced_minimum_one_nt(self) -> None:
         hand = evaluation(13, 3, 3, 4, 3)
         self.assertEqual(recommend_opener_rebid("1♦", "1♥", hand, vulnerability=VULNERABILITY).bid, "1NT")

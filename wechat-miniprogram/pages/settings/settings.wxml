@@ -1,108 +1,111 @@
-<view class="container">
-  <view class="card">
-    <view class="title">叫牌规则设置</view>
+<view class="container settings-page">
+  <view class="card top-card">
+    <view class="page-title">叫牌规则设置</view>
   </view>
 
-  <view class="card">
-    <view class="field">
+  <view class="card settings-card">
+    <view class="field-row">
       <view class="field-label">1NT 开叫范围</view>
-      <picker mode="selector" range="{{oneNtRanges}}" value="{{oneNtIndex}}" bindchange="onOneNtChange">
+      <picker mode="selector" range="{{oneNtRanges}}" value="{{oneNtIndex}}" bindchange="onOneNtChange" class="field-picker">
         <view class="picker-box">{{oneNtRanges[oneNtIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
+    <view class="field-row">
       <view class="field-label">一阶开叫最低 HCP</view>
-      <picker mode="selector" range="{{openingMinOptions}}" value="{{openingMinIndex}}" bindchange="onOpeningMinChange">
+      <picker mode="selector" range="{{openingMinOptions}}" value="{{openingMinIndex}}" bindchange="onOpeningMinChange" class="field-picker">
         <view class="picker-box">{{openingMinOptions[openingMinIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
+    <view class="field-row">
       <view class="field-label">强 2♣ 最低 HCP</view>
-      <picker mode="selector" range="{{strongTwoOptions}}" value="{{strongTwoIndex}}" bindchange="onStrongTwoChange">
+      <picker mode="selector" range="{{strongTwoOptions}}" value="{{strongTwoIndex}}" bindchange="onStrongTwoChange" class="field-picker">
         <view class="picker-box">{{strongTwoOptions[strongTwoIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
-      <view class="field-label">2/1 进局逼叫最低 HCP</view>
-      <picker mode="selector" range="{{twoOverOneOptions}}" value="{{twoOverOneIndex}}" bindchange="onTwoOverOneChange">
+    <view class="field-row">
+      <view class="field-label">2/1 最低 HCP</view>
+      <picker mode="selector" range="{{twoOverOneOptions}}" value="{{twoOverOneIndex}}" bindchange="onTwoOverOneChange" class="field-picker">
         <view class="picker-box">{{twoOverOneOptions[twoOverOneIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
-      <view class="field-label">高花开叫后 1NT 应叫 HCP 范围</view>
-      <picker mode="selector" range="{{forcingNtRanges}}" value="{{forcingNtIndex}}" bindchange="onForcingNtRangeChange">
+    <view class="field-row">
+      <view class="field-label">1M 后 1NT 范围</view>
+      <picker mode="selector" range="{{forcingNtRanges}}" value="{{forcingNtIndex}}" bindchange="onForcingNtRangeChange" class="field-picker">
         <view class="picker-box">{{forcingNtRanges[forcingNtIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
-      <view class="field-label">高花简单加叫上限 HCP（3张支持）</view>
-      <picker mode="selector" range="{{simpleRaiseMaxOptions}}" value="{{simpleRaiseMaxIndex}}" bindchange="onSimpleRaiseMaxChange">
+    <view class="field-row">
+      <view class="field-label">简单加叫上限</view>
+      <picker mode="selector" range="{{simpleRaiseMaxOptions}}" value="{{simpleRaiseMaxIndex}}" bindchange="onSimpleRaiseMaxChange" class="field-picker">
         <view class="picker-box">{{simpleRaiseMaxOptions[simpleRaiseMaxIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
-      <view class="field-label">高花邀局加叫范围 HCP（3张支持）</view>
-      <picker mode="selector" range="{{limitRaiseRanges}}" value="{{limitRaiseIndex}}" bindchange="onLimitRaiseRangeChange">
+    <view class="field-row">
+      <view class="field-label">邀局加叫范围</view>
+      <picker mode="selector" range="{{limitRaiseRanges}}" value="{{limitRaiseIndex}}" bindchange="onLimitRaiseRangeChange" class="field-picker">
         <view class="picker-box">{{limitRaiseRanges[limitRaiseIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
-      <view class="field-label">Bergen 弱支持上限 HCP（4张支持）</view>
-      <picker mode="selector" range="{{bergenWeakMaxOptions}}" value="{{bergenWeakMaxIndex}}" bindchange="onBergenWeakMaxChange">
+    <view class="field-row">
+      <view class="field-label">Bergen 弱上限</view>
+      <picker mode="selector" range="{{bergenWeakMaxOptions}}" value="{{bergenWeakMaxIndex}}" bindchange="onBergenWeakMaxChange" class="field-picker">
         <view class="picker-box">{{bergenWeakMaxOptions[bergenWeakMaxIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
-      <view class="field-label">否定性加倍最低 HCP</view>
-      <picker mode="selector" range="{{negativeDoubleMinOptions}}" value="{{negativeDoubleMinIndex}}" bindchange="onNegativeDoubleMinChange">
+    <view class="field-row">
+      <view class="field-label">否定加倍最低</view>
+      <picker mode="selector" range="{{negativeDoubleMinOptions}}" value="{{negativeDoubleMinIndex}}" bindchange="onNegativeDoubleMinChange" class="field-picker">
         <view class="picker-box">{{negativeDoubleMinOptions[negativeDoubleMinIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
-      <view class="field-label">高花开叫后 1NT 应叫</view>
-      <picker mode="selector" range="{{forcingNtLabels}}" value="{{forcingNtLabelIndex}}" bindchange="onForcingNtLabelChange">
+    <view class="field-row">
+      <view class="field-label">1M 后 1NT 性质</view>
+      <picker mode="selector" range="{{forcingNtLabels}}" value="{{forcingNtLabelIndex}}" bindchange="onForcingNtLabelChange" class="field-picker">
         <view class="picker-box">{{forcingNtLabels[forcingNtLabelIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
+    <view class="field-row">
       <view class="field-label">计分倾向</view>
-      <picker mode="selector" range="{{scoringModes}}" value="{{scoringModeIndex}}" bindchange="onScoringModeChange">
+      <picker mode="selector" range="{{scoringModes}}" value="{{scoringModeIndex}}" bindchange="onScoringModeChange" class="field-picker">
         <view class="picker-box">{{scoringModes[scoringModeIndex]}}</view>
       </picker>
     </view>
 
-    <view class="field">
-      <view class="field-label">薄局/薄满贯激进度（-1 保守，0 标准，1 激进）</view>
-      <picker mode="selector" range="{{aggressivenessOptions}}" value="{{aggressivenessIndex}}" bindchange="onAggressivenessChange">
+    <view class="field-row">
+      <view class="field-label">薄局激进度</view>
+      <picker mode="selector" range="{{aggressivenessOptions}}" value="{{aggressivenessIndex}}" bindchange="onAggressivenessChange" class="field-picker">
         <view class="picker-box">{{aggressivenessOptions[aggressivenessIndex]}}</view>
       </picker>
     </view>
+    <view class="hint-line">激进度：-1 保守，0 标准，1 激进</view>
   </view>
 
-  <view class="card">
-    <view class="switch-row"><text>启用弱二开叫</text><switch checked="{{settings.weak_two_enabled}}" data-key="weak_two_enabled" bindchange="onSwitchChange" /></view>
-    <view class="switch-row"><text>二阶弱开叫后启用 Ogust 2NT 问叫</text><switch checked="{{settings.august_2nt_enabled}}" data-key="august_2nt_enabled" bindchange="onSwitchChange" /></view>
-    <view class="switch-row"><text>1NT 后启用 Stayman</text><switch checked="{{settings.stayman_enabled}}" data-key="stayman_enabled" bindchange="onSwitchChange" /></view>
-    <view class="switch-row"><text>1NT 后启用 Jacoby Transfer</text><switch checked="{{settings.transfers_enabled}}" data-key="transfers_enabled" bindchange="onSwitchChange" /></view>
-    <view class="switch-row"><text>高花后启用 Jacoby 2NT</text><switch checked="{{settings.jacoby_2nt_enabled}}" data-key="jacoby_2nt_enabled" bindchange="onSwitchChange" /></view>
-    <view class="switch-row"><text>高花应叫启用 Bergen Raises（4张支持）</text><switch checked="{{settings.bergen_raises_enabled}}" data-key="bergen_raises_enabled" bindchange="onSwitchChange" /></view>
-    <view class="switch-row"><text>低花开叫后启用低花反加叫（Inverted Minors）</text><switch checked="{{settings.inverted_minors_enabled}}" data-key="inverted_minors_enabled" bindchange="onSwitchChange" /></view>
-    <view class="switch-row"><text>竞叫后启用否定性加倍</text><switch checked="{{settings.negative_double_enabled}}" data-key="negative_double_enabled" bindchange="onSwitchChange" /></view>
-    <view class="switch-row"><text>按局况调整成局阈值</text><switch checked="{{settings.respect_vulnerability}}" data-key="respect_vulnerability" bindchange="onSwitchChange" /></view>
+  <view class="card settings-card">
+    <view class="switch-row"><text class="switch-label">启用弱二开叫</text><switch checked="{{settings.weak_two_enabled}}" data-key="weak_two_enabled" bindchange="onSwitchChange" /></view>
+    <view class="switch-row"><text class="switch-label">弱二后启用 Ogust 2NT</text><switch checked="{{settings.august_2nt_enabled}}" data-key="august_2nt_enabled" bindchange="onSwitchChange" /></view>
+    <view class="switch-row"><text class="switch-label">1NT 后启用 Stayman</text><switch checked="{{settings.stayman_enabled}}" data-key="stayman_enabled" bindchange="onSwitchChange" /></view>
+    <view class="switch-row"><text class="switch-label">1NT 后启用 Transfer</text><switch checked="{{settings.transfers_enabled}}" data-key="transfers_enabled" bindchange="onSwitchChange" /></view>
+    <view class="switch-row"><text class="switch-label">高花后启用 Jacoby 2NT</text><switch checked="{{settings.jacoby_2nt_enabled}}" data-key="jacoby_2nt_enabled" bindchange="onSwitchChange" /></view>
+    <view class="switch-row"><text class="switch-label">启用 Bergen Raises</text><switch checked="{{settings.bergen_raises_enabled}}" data-key="bergen_raises_enabled" bindchange="onSwitchChange" /></view>
+    <view class="switch-row"><text class="switch-label">启用低花反加叫</text><switch checked="{{settings.inverted_minors_enabled}}" data-key="inverted_minors_enabled" bindchange="onSwitchChange" /></view>
+    <view class="switch-row"><text class="switch-label">启用否定性加倍</text><switch checked="{{settings.negative_double_enabled}}" data-key="negative_double_enabled" bindchange="onSwitchChange" /></view>
+    <view class="switch-row switch-row-last"><text class="switch-label">按局况调整成局阈值</text><switch checked="{{settings.respect_vulnerability}}" data-key="respect_vulnerability" bindchange="onSwitchChange" /></view>
   </view>
 
-  <view class="card">
-    <view class="primary-btn {{hoverKey === 'save' ? 'is-hover' : ''}}" hover-class="primary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="save" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="save">保存设置</view>
-    <view class="secondary-btn {{hoverKey === 'reset' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="reset" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="reset">恢复默认规则</view>
+  <view class="card action-card">
+    <view class="action-row">
+      <view class="action-btn primary-btn {{hoverKey === 'save' ? 'is-hover' : ''}}" hover-class="primary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="save" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="save">保存设置</view>
+      <view class="action-btn secondary-btn {{hoverKey === 'reset' ? 'is-hover' : ''}}" hover-class="secondary-btn-hover" hover-start-time="0" hover-stay-time="100" data-hover="reset" bindmouseenter="onHoverEnter" bindmouseleave="onHoverLeave" bindmouseover="onHoverEnter" bindmouseout="onHoverLeave" bindtap="reset">恢复默认</view>
+    </view>
   </view>
 </view>

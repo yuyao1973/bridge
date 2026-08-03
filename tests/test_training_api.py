@@ -325,6 +325,14 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.mode, "应叫训练")
         self.assertIn(question.recommendation.bid, question.choices)
+        self.assertTrue(question.auction.startswith("1NT-"))
+
+    def test_response_question_with_one_nt_filter_never_falls_back_to_opening_mode(self) -> None:
+        for seed in range(100, 130):
+            question = generate_response_question(seed=seed, opener_bid="1NT", settings=RuleSettings())
+            self.assertEqual(question.mode, "应叫训练")
+            self.assertEqual(question.opener_bid, "1NT")
+
     def test_supported_openings_for_one_level_category_matches_constant(self) -> None:
         self.assertEqual(supported_openings_for_category("一阶定约"), {"1♣", "1♦", "1♥", "1♠", "1NT"})
 
@@ -368,6 +376,12 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.mode, "开叫者再叫训练")
         self.assertTrue(question.auction.startswith("1NT-"))
+
+    def test_opener_rebid_with_one_nt_filter_never_falls_back_to_lower_mode(self) -> None:
+        for seed in range(100, 130):
+            question = generate_opener_rebid_question(seed=seed, settings=RuleSettings(), opener_bid="1NT")
+            self.assertEqual(question.mode, "开叫者再叫训练")
+            self.assertEqual(question.opener_bid, "1NT")
 
     def test_opener_rebid_question_respects_requested_opening_response_sequence(self) -> None:
         question = generate_opener_rebid_question(
@@ -441,6 +455,12 @@ class TrainingGenerationTests(unittest.TestCase):
         self.assertEqual(question.opener_bid, "1NT")
         self.assertEqual(question.mode, "应叫者第二次应叫训练")
         self.assertTrue(question.auction.startswith("1NT-Pass-"))
+
+    def test_responder_rebid_with_one_nt_filter_never_falls_back_to_lower_mode(self) -> None:
+        for seed in range(100, 130):
+            question = generate_responder_rebid_question(seed=seed, settings=RuleSettings(), opener_bid="1NT")
+            self.assertEqual(question.mode, "应叫者第二次应叫训练")
+            self.assertEqual(question.opener_bid, "1NT")
 
     def test_responder_rebid_question_respects_requested_three_bid_sequence(self) -> None:
         baseline = generate_responder_rebid_question(seed=100, settings=RuleSettings(), opener_bid="1NT")

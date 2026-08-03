@@ -18,6 +18,7 @@ from .bidding import (
     legal_response_bids,
     legal_rebid_bids,
     legal_responder_rebid_bids,
+    ns_is_vulnerable,
     one_nt_secondary_major_opening_bid,
     parse_contract_bid,
     qualifies_for_nt_opening_shape,
@@ -584,6 +585,366 @@ def generate_opening_question(seed: int | None = None, settings: RuleSettings | 
     return fallback  # type: ignore[return-value]
 
 
+def get_opener_only_constraint(opener_bid: str, settings: RuleSettings) -> HandConstraint | None:
+    """Constraint for constructing an opener hand that should open the requested bid."""
+    if opener_bid == "1NT":
+        def nt1(hand: Hand) -> bool:
+            ev = evaluate_hand(hand)
+            return qualifies_for_nt_opening_shape(ev) and settings.one_nt_min <= ev.hcp <= settings.one_nt_max
+
+        return nt1
+    if opener_bid == "2NT":
+        def nt2(hand: Hand) -> bool:
+            ev = evaluate_hand(hand)
+            return qualifies_for_nt_opening_shape(ev) and 20 <= ev.hcp <= 21
+
+        return nt2
+    if opener_bid == "2♣":
+        def strong_club(hand: Hand) -> bool:
+            return evaluate_hand(hand).hcp >= settings.strong_two_club_min
+
+        return strong_club
+    if opener_bid == "1♥":
+        def hearts(hand: Hand) -> bool:
+            ev = evaluate_hand(hand)
+            return ev.lengths["H"] >= 5 and ev.hcp >= settings.opening_min_hcp and ev.lengths["H"] >= ev.lengths["S"]
+
+        return hearts
+    if opener_bid == "1♠":
+        def spades(hand: Hand) -> bool:
+            ev = evaluate_hand(hand)
+            return ev.lengths["S"] >= 5 and ev.hcp >= settings.opening_min_hcp and ev.lengths["S"] >= ev.lengths["H"]
+
+        return spades
+    if opener_bid == "1♣":
+        def clubs(hand: Hand) -> bool:
+            ev = evaluate_hand(hand)
+            return (
+                ev.hcp >= settings.opening_min_hcp
+                and ev.lengths["S"] < 5
+                and ev.lengths["H"] < 5
+                and (ev.lengths["C"] > ev.lengths["D"] or (ev.lengths["C"] == 3 and ev.lengths["D"] == 3))
+            )
+
+        return clubs
+    if opener_bid == "1♦":
+        def diamonds(hand: Hand) -> bool:
+            ev = evaluate_hand(hand)
+            return (
+                ev.hcp >= settings.opening_min_hcp
+                and ev.lengths["S"] < 5
+                and ev.lengths["H"] < 5
+                and (
+                    ev.lengths["D"] > ev.lengths["C"]
+                    or (ev.lengths["D"] == 4 and ev.lengths["C"] == 4)
+                )
+            )
+
+        return diamonds
+    if opener_bid == "3NT":
+        def gambling(hand: Hand) -> bool:
+            return choose_gambling_3nt_minor(evaluate_hand(hand), settings.opening_min_hcp) is not None
+
+        return gambling
+    if opener_bid in PREEMPT_OPENINGS:
+        parsed = parse_contract_bid(opener_bid)
+        if parsed is None:
+            return None
+        level, strain = parsed
+        suit = symbol_to_suit(strain)
+        if suit is None:
+            return None
+        min_length = {2: 6, 3: 7, 4: 8, 5: 9}.get(level, 7)
+        hcp_lo, hcp_hi = (6, 10) if level == 2 else (5, 10)
+
+        def preempt(hand: Hand) -> bool:
+            ev = evaluate_hand(hand)
+            if not (hcp_lo <= ev.hcp <= hcp_hi):
+                return False
+            length = ev.lengths[suit]
+            if length < min_length:
+                return False
+            if length < max(ev.lengths.values()):
+                return False
+            # Shape prefilter only; exact bid is verified after dealing with vulnerability.
+            return ev.top_honors_by_suit.get(suit, 0) >= 1
+
+        return preempt
+    return None
+
+
+def vulnerability_for_targeted_opener(opener_bid: str, seed: int) -> str:
+    """Pick a vulnerability that can realistically produce rare high-level preempts."""
+    vulnerability = choose_vulnerability(seed)
+    parsed = parse_contract_bid(opener_bid)
+    if parsed is not None and parsed[0] >= 4 and ns_is_vulnerable(vulnerability):
+        return "双方无局"
+    return vulnerability
+
+
+def _any_responder_hand(_hand: Hand) -> bool:
+    return True
+
+
+def try_generate_response_with_targeted_opener(
+    seed: int,
+    opener_bid: str,
+    settings: RuleSettings,
+) -> TrainingQuestion | None:
+    """Build a response question by first constructing a hand that opens opener_bid."""
+    vulnerability = vulnerability_for_targeted_opener(opener_bid, seed)
+    opener_constraint = get_opener_only_constraint(opener_bid, settings)
+    if opener_constraint is None:
+        return None
+    targeted = deal_targeted(
+        opener_constraint,
+        _any_responder_hand,
+        seed,
+        max_opener_attempts=3_000,
+        max_responder_attempts=1,
+    )
+    if targeted is None:
+        return None
+    opener_hand, responder_hand = targeted
+    opener_evaluation = evaluate_hand(opener_hand)
+    opener_recommendation = recommend_opening(opener_evaluation, settings, vulnerability)
+    if opener_recommendation.bid != opener_bid:
+        return None
+    evaluation = evaluate_hand(responder_hand)
+    recommendation = recommend_response(opener_recommendation.bid, evaluation, settings, vulnerability)
+    return TrainingQuestion(
+        hand=responder_hand,
+        evaluation=evaluation,
+        recommendation=recommendation,
+        vulnerability=vulnerability,
+        choices=RESPONSE_BIDS,
+        legal_choices=legal_response_bids(opener_recommendation.bid),
+        acceptable_bids=build_acceptable_bids(
+            recommendation.bid,
+            legal_response_bids(opener_recommendation.bid),
+            mode="response",
+            opener_bid=opener_recommendation.bid,
+        ),
+        mode="应叫训练",
+        auction=f"{opener_recommendation.bid}-?",
+        opener_bid=opener_recommendation.bid,
+    )
+
+
+def _make_response_hand_constraint(
+    opener_bid: str,
+    response_bid: str | None,
+    settings: RuleSettings,
+    vulnerability: str,
+) -> HandConstraint:
+    def constraint(hand: Hand) -> bool:
+        rec = recommend_response(opener_bid, evaluate_hand(hand), settings, vulnerability)
+        if rec.bid == "Pass" and opener_bid not in PREEMPT_OPENINGS:
+            return False
+        if response_bid is not None and rec.bid != response_bid:
+            return False
+        return True
+
+    return constraint
+
+
+def try_generate_opener_rebid_with_targeted(
+    seed: int,
+    opener_bid: str,
+    response_bid: str | None,
+    settings: RuleSettings,
+    supported_openings: set[str],
+) -> TrainingQuestion | None:
+    """Build an opener-rebid question by constructing hands for the requested sequence."""
+    vulnerability = vulnerability_for_targeted_opener(opener_bid, seed)
+    opener_constraint: HandConstraint | None = None
+    responder_constraint: HandConstraint | None = None
+    max_opener_attempts = 2_000
+    max_responder_attempts = 1
+    if response_bid is not None:
+        sequence = get_sequence_constraints(opener_bid, response_bid, None, settings)
+        if sequence is not None:
+            opener_constraint, responder_constraint = sequence
+            max_responder_attempts = 80
+        else:
+            opener_constraint = get_opener_only_constraint(opener_bid, settings)
+            if opener_constraint is None:
+                return None
+            responder_constraint = _make_response_hand_constraint(
+                opener_bid, response_bid, settings, vulnerability
+            )
+            max_responder_attempts = 120
+    else:
+        opener_constraint = get_opener_only_constraint(opener_bid, settings)
+        if opener_constraint is None:
+            return None
+        # Prefer a non-Pass response; keep attempts low and rely on alternate seeds.
+        responder_constraint = _make_response_hand_constraint(
+            opener_bid, None, settings, vulnerability
+        )
+        max_responder_attempts = 40
+
+    targeted = deal_targeted(
+        opener_constraint,
+        responder_constraint,
+        seed,
+        max_opener_attempts=max_opener_attempts,
+        max_responder_attempts=max_responder_attempts,
+    )
+    if targeted is None:
+        return None
+    opener_hand, responder_hand = targeted
+    opener_evaluation = evaluate_hand(opener_hand)
+    opening_recommendation = recommend_opening(opener_evaluation, settings, vulnerability)
+    if opening_recommendation.bid not in supported_openings:
+        return None
+    if opening_recommendation.bid != opener_bid:
+        return None
+    responder_evaluation = evaluate_hand(responder_hand)
+    response_recommendation = recommend_response(
+        opening_recommendation.bid,
+        responder_evaluation,
+        settings,
+        vulnerability,
+    )
+    if response_recommendation.bid == "Pass" and opening_recommendation.bid not in PREEMPT_OPENINGS:
+        return None
+    if response_bid is not None and response_recommendation.bid != response_bid:
+        return None
+    recommendation = recommend_opener_rebid(
+        opening_recommendation.bid,
+        response_recommendation.bid,
+        opener_evaluation,
+        settings,
+        vulnerability,
+    )
+    return TrainingQuestion(
+        hand=opener_hand,
+        evaluation=opener_evaluation,
+        recommendation=recommendation,
+        vulnerability=vulnerability,
+        choices=REBID_BIDS,
+        legal_choices=legal_rebid_bids(response_recommendation.bid),
+        acceptable_bids=build_acceptable_bids(
+            recommendation.bid,
+            legal_rebid_bids(response_recommendation.bid),
+            mode="opener_rebid",
+            opener_bid=opening_recommendation.bid,
+            response_bid=response_recommendation.bid,
+        ),
+        mode="开叫者再叫训练",
+        auction=f"{opening_recommendation.bid}-{response_recommendation.bid}-? ",
+        opener_bid=opening_recommendation.bid,
+        response_bid=response_recommendation.bid,
+    )
+
+
+def try_generate_responder_rebid_with_targeted(
+    seed: int,
+    opener_bid: str,
+    response_bid: str | None,
+    opener_rebid_bid: str | None,
+    settings: RuleSettings,
+    supported_openings: set[str],
+) -> TrainingQuestion | None:
+    """Build a responder-rebid question by constructing hands for the requested sequence."""
+    vulnerability = vulnerability_for_targeted_opener(opener_bid, seed)
+    opener_constraint: HandConstraint | None = None
+    responder_constraint: HandConstraint | None = None
+    max_opener_attempts = 2_000
+    max_responder_attempts = 40
+    if response_bid is not None and opener_rebid_bid is not None:
+        sequence = get_sequence_constraints(opener_bid, response_bid, opener_rebid_bid, settings)
+        if sequence is not None:
+            opener_constraint, responder_constraint = sequence
+            max_responder_attempts = 80
+    if opener_constraint is None and response_bid is not None:
+        sequence = get_sequence_constraints(opener_bid, response_bid, None, settings)
+        if sequence is not None:
+            opener_constraint, responder_constraint = sequence
+            max_responder_attempts = 80
+    if opener_constraint is None:
+        opener_constraint = get_opener_only_constraint(opener_bid, settings)
+        if opener_constraint is None:
+            return None
+    if responder_constraint is None:
+        responder_constraint = _make_response_hand_constraint(
+            opener_bid, response_bid, settings, vulnerability
+        )
+        max_responder_attempts = 120 if response_bid is not None else 40
+
+    targeted = deal_targeted(
+        opener_constraint,
+        responder_constraint,
+        seed,
+        max_opener_attempts=max_opener_attempts,
+        max_responder_attempts=max_responder_attempts,
+    )
+    if targeted is None:
+        return None
+    opener_hand, responder_hand = targeted
+    opener_evaluation = evaluate_hand(opener_hand)
+    responder_evaluation = evaluate_hand(responder_hand)
+    opening_recommendation = recommend_opening(opener_evaluation, settings, vulnerability)
+    if opening_recommendation.bid not in supported_openings:
+        return None
+    if opening_recommendation.bid != opener_bid:
+        return None
+    response_recommendation = recommend_response(
+        opening_recommendation.bid,
+        responder_evaluation,
+        settings,
+        vulnerability,
+    )
+    if response_recommendation.bid == "Pass":
+        return None
+    if response_bid is not None and response_recommendation.bid != response_bid:
+        return None
+    opener_rebid_recommendation = recommend_opener_rebid(
+        opening_recommendation.bid,
+        response_recommendation.bid,
+        opener_evaluation,
+        settings,
+        vulnerability,
+    )
+    if opener_rebid_recommendation.bid == "Pass":
+        return None
+    if opener_rebid_bid is not None and opener_rebid_recommendation.bid != opener_rebid_bid:
+        return None
+    recommendation = recommend_responder_rebid(
+        opening_recommendation.bid,
+        response_recommendation.bid,
+        opener_rebid_recommendation.bid,
+        responder_evaluation,
+        settings,
+        vulnerability,
+    )
+    return TrainingQuestion(
+        hand=responder_hand,
+        evaluation=responder_evaluation,
+        recommendation=recommendation,
+        vulnerability=vulnerability,
+        choices=RESPONDER_REBID_BIDS,
+        legal_choices=legal_responder_rebid_bids(opener_rebid_recommendation.bid),
+        acceptable_bids=build_acceptable_bids(
+            recommendation.bid,
+            legal_responder_rebid_bids(opener_rebid_recommendation.bid),
+            mode="responder_rebid",
+            opener_bid=opening_recommendation.bid,
+            response_bid=response_recommendation.bid,
+            opener_rebid_bid=opener_rebid_recommendation.bid,
+        ),
+        mode="应叫者第二次应叫训练",
+        auction=(
+            f"{opening_recommendation.bid}-Pass-{response_recommendation.bid}-Pass-"
+            f"{opener_rebid_recommendation.bid}-Pass-? "
+        ),
+        opener_bid=opening_recommendation.bid,
+        response_bid=response_recommendation.bid,
+        opener_rebid_bid=opener_rebid_recommendation.bid,
+    )
+
+
 def generate_response_question(
     seed: int | None = None,
     opener_bid: str | None = None,
@@ -595,7 +956,21 @@ def generate_response_question(
     if opener_bid is not None and opener_bid not in supported_openings:
         opener_bid = None
     base_seed = seed if seed is not None else 1
+
+    # When a specific opener is requested, construct common openings first.
+    # Rare 4/5-level preempts are handled after the random search fallback.
+    if opener_bid is not None:
+        parsed = parse_contract_bid(opener_bid)
+        if parsed is None or parsed[0] < 4:
+            targeted = try_generate_response_with_targeted_opener(base_seed, opener_bid, settings)
+            if targeted is not None:
+                return targeted
+
     attempts = search_attempt_budget(opener_bid=opener_bid)
+    if opener_bid is not None:
+        parsed = parse_contract_bid(opener_bid)
+        if parsed is not None and parsed[0] >= 4:
+            attempts = min(attempts, 200)
 
     for offset in range(attempts):
         hands = deal(base_seed + offset)
@@ -628,6 +1003,20 @@ def generate_response_question(
             opener_bid=opener_recommendation.bid,
         )
 
+    if opener_bid is not None:
+        # Keep searching with alternate seeds rather than switching to opening training.
+        for extra in range(0, 40):
+            targeted = try_generate_response_with_targeted_opener(
+                base_seed + extra * 97_003, opener_bid, settings
+            )
+            if targeted is not None:
+                return targeted
+        # Prefer non-vulnerable seeds for rare high-level preempts.
+        for extra in range(40):
+            targeted = try_generate_response_with_targeted_opener(extra * 4, opener_bid, settings)
+            if targeted is not None:
+                return targeted
+
     return generate_opening_question(seed, settings)
 
 
@@ -646,6 +1035,10 @@ def generate_opener_rebid_question(
         response_bid = None
     base_seed = seed if seed is not None else 1
     attempts = directed_sequence_attempt_budget(opener_bid=opener_bid, response_bid=response_bid)
+    if opener_bid is not None:
+        parsed = parse_contract_bid(opener_bid)
+        if parsed is not None and parsed[0] >= 4:
+            attempts = min(attempts, 200)
     prioritize_sequence = opener_bid is not None and response_bid is not None
 
     # Fast path: construct hand pair directly from shape/HCP constraints for known sequences
@@ -744,6 +1137,28 @@ def generate_opener_rebid_question(
                 response_bid=response_recommendation.bid,
             )
 
+    if opener_bid is not None:
+        for extra in range(0, 40):
+            targeted = try_generate_opener_rebid_with_targeted(
+                base_seed + extra * 97_003,
+                opener_bid,
+                response_bid,
+                settings,
+                supported_openings,
+            )
+            if targeted is not None:
+                return targeted
+        for extra in range(40):
+            targeted = try_generate_opener_rebid_with_targeted(
+                extra * 4,
+                opener_bid,
+                response_bid,
+                settings,
+                supported_openings,
+            )
+            if targeted is not None:
+                return targeted
+
     if response_bid is not None:
         return generate_opener_rebid_question(
             seed,
@@ -752,6 +1167,18 @@ def generate_opener_rebid_question(
             opener_category,
             response_bid=None,
         )
+
+    if opener_bid is not None:
+        for extra in range(40):
+            targeted = try_generate_opener_rebid_with_targeted(
+                extra * 4 + 1,
+                opener_bid,
+                None,
+                settings,
+                supported_openings,
+            )
+            if targeted is not None:
+                return targeted
 
     return generate_response_question(seed, opener_bid, settings, opener_category)
 
@@ -778,6 +1205,11 @@ def generate_responder_rebid_question(
         response_bid=response_bid,
         opener_rebid_bid=opener_rebid_bid,
     )
+    if opener_bid is not None:
+        parsed = parse_contract_bid(opener_bid)
+        if parsed is not None and parsed[0] >= 3:
+            # Responder-rebid after preempt is rare; prefer targeted / opener-rebid fallback.
+            attempts = min(attempts, 150)
     prioritize_sequence = opener_bid is not None and response_bid is not None and opener_rebid_bid is not None
 
     # Fast path: construct hand pair directly from shape/HCP constraints for known sequences
@@ -905,6 +1337,42 @@ def generate_responder_rebid_question(
                 opener_rebid_bid=opener_rebid_recommendation.bid,
             )
 
+    if opener_bid is not None:
+        parsed = parse_contract_bid(opener_bid)
+        # After mid/high preempts a second response is uncommon; prefer opener-rebid quickly.
+        preempt_fast_fallback = (
+            opener_bid in PREEMPT_OPENINGS
+            and opener_bid != "3NT"
+            and parsed is not None
+            and parsed[0] >= 3
+            and response_bid is None
+            and opener_rebid_bid is None
+        )
+        retry_limit = 6 if preempt_fast_fallback else 40
+        for extra in range(0, retry_limit):
+            targeted = try_generate_responder_rebid_with_targeted(
+                base_seed + extra * 97_003,
+                opener_bid,
+                response_bid,
+                opener_rebid_bid,
+                settings,
+                supported_openings,
+            )
+            if targeted is not None:
+                return targeted
+        if not preempt_fast_fallback:
+            for extra in range(40):
+                targeted = try_generate_responder_rebid_with_targeted(
+                    extra * 4,
+                    opener_bid,
+                    response_bid,
+                    opener_rebid_bid,
+                    settings,
+                    supported_openings,
+                )
+                if targeted is not None:
+                    return targeted
+
     if opener_rebid_bid is not None:
         return generate_responder_rebid_question(
             seed,
@@ -924,6 +1392,11 @@ def generate_responder_rebid_question(
             response_bid=None,
             opener_rebid_bid=None,
         )
+
+    if opener_bid is not None:
+        # High-level preempts often have no second response; stay on the same opener
+        # by falling back to opener-rebid rather than a different opening.
+        return generate_opener_rebid_question(seed, settings, opener_bid, opener_category, None)
 
     return generate_response_question(seed, None, settings, opener_category)
 

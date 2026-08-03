@@ -214,6 +214,10 @@ function preemptOverbidAllowance(vulnerability) {
   return nsIsVulnerable(vulnerability) ? 2 : 3;
 }
 
+function preemptMinTopHonors(vulnerability) {
+  return nsIsVulnerable(vulnerability) ? 2 : 1;
+}
+
 function maxPreemptLevelForSuit(length, vulnerability, suit) {
   if (length < 6) {
     return null;
@@ -228,25 +232,39 @@ function maxPreemptLevelForSuit(length, vulnerability, suit) {
   return Math.min(level, 5);
 }
 
-function choosePreemptOpening(lengths, hcp, vulnerability) {
+function choosePreemptOpening(lengths, hcp, vulnerability, topHonorsBySuit) {
   if (!(hcp >= 5 && hcp <= 10)) {
     return null;
   }
-  const suit = ["S", "H", "D", "C"].slice().sort(function (a, b) {
-    if (lengths[b] !== lengths[a]) {
-      return lengths[b] - lengths[a];
+  const honors = topHonorsBySuit || {};
+  const minHonors = preemptMinTopHonors(vulnerability);
+  const candidates = [];
+  for (let i = 0; i < 4; i += 1) {
+    const suit = ["S", "H", "D", "C"][i];
+    const length = lengths[suit];
+    if (length < 7 || (honors[suit] || 0) < minHonors) {
+      continue;
     }
-    const rank = { S: 2, H: 1, D: 0, C: -1 };
-    return rank[b] - rank[a];
-  })[0];
-  if (lengths[suit] < 7) {
+    const level = maxPreemptLevelForSuit(length, vulnerability, suit);
+    if (level === null || level < 3) {
+      continue;
+    }
+    candidates.push({ suit: suit, level: level });
+  }
+  if (!candidates.length) {
     return null;
   }
-  const level = maxPreemptLevelForSuit(lengths[suit], vulnerability, suit);
-  if (level === null || level < 3) {
-    return null;
-  }
-  return String(level) + suitSymbol(suit);
+  candidates.sort(function (a, b) {
+    if (lengths[b.suit] !== lengths[a.suit]) {
+      return lengths[b.suit] - lengths[a.suit];
+    }
+    const rank = { S: 3, H: 2, D: 1, C: 0 };
+    if (rank[b.suit] !== rank[a.suit]) {
+      return rank[b.suit] - rank[a.suit];
+    }
+    return b.level - a.level;
+  });
+  return String(candidates[0].level) + suitSymbol(candidates[0].suit);
 }
 
 const OPENING_RULE_PRINCIPLES = {
@@ -262,10 +280,11 @@ const OPENING_RULE_PRINCIPLES = {
   "拼搏式 3NT":
     "开叫训练原则第8条：7张以上坚固低花（含 AKQ），边张无 A/K/Q，且未达一阶开叫点力时开拼搏式 3NT（优先于同档阻击）。",
   "阻击开叫":
-    "开叫训练原则第9条：5-10 HCP 且7张以上长套，按套长作 3/4/5 阶阻击，并遵循有局宕二、无局宕三。",
+    "开叫训练原则第9条：5-10 HCP 且7张以上长套，按套长作 3/4/5 阶阻击；无局至少1张顶张大牌，有局至少2张；并遵循有局宕二、无局宕三。",
   "弱二开叫":
-    "开叫训练原则第10条：6-10 HCP 且6张以上套，二阶弱二开 2♦/2♥/2♠（不使用弱 2♣），并遵循有局宕二、无局宕三。",
-  "6-6 双套弱二": "开叫训练原则第11条：6-10 HCP 且6-6双套，开二阶质量最好的套。",
+    "开叫训练原则第10条：6-10 HCP 且6张以上套，二阶弱二开 2♦/2♥/2♠（不使用弱 2♣）；无局至少1张顶张大牌，有局至少2张；并遵循有局宕二、无局宕三。",
+  "6-6 双套弱二":
+    "开叫训练原则第11条：6-10 HCP 且6-6双套，在满足顶张质量的可开弱二花色中开质量最好的套。",
   "不叫": "开叫训练原则第12条：不满足以上开叫条件时 Pass。",
 };
 
@@ -493,15 +512,18 @@ function recommendOpening(evaluation, settings, vulnerability) {
   }
 
   if (settings.weak_two_enabled) {
-    const preempt = choosePreemptOpening(lengths, hcp, vulnerability);
+    const preempt = choosePreemptOpening(lengths, hcp, vulnerability, evaluation.top_honors_by_suit);
     if (preempt) {
       const overbid = preemptOverbidAllowance(vulnerability);
+      const minHonors = preemptMinTopHonors(vulnerability);
       return finish({
         bid: preempt,
         explanation:
           "你有 " +
           hcp +
-          " HCP，持有 7 张以上长套，应按套长作 3/4/5 阶阻击，并遵循有局宕二无局宕三（本次可宕 " +
+          " HCP，持有 7 张以上长套，应按套长作 3/4/5 阶阻击；当前局况要求长套至少 " +
+          minHonors +
+          " 张顶张大牌，并遵循有局宕二无局宕三（本次可宕 " +
           overbid +
           "），因此开叫 " +
           preempt +
@@ -512,11 +534,16 @@ function recommendOpening(evaluation, settings, vulnerability) {
       });
     }
     if (hcp >= 6 && hcp <= 10) {
+      const honors = evaluation.top_honors_by_suit || {};
+      const minHonors = preemptMinTopHonors(vulnerability);
       const candidates = ["S", "H", "D"].filter(function (suit) {
-        return lengths[suit] >= 6 && maxPreemptLevelForSuit(lengths[suit], vulnerability, suit) !== null;
+        return (
+          lengths[suit] >= 6 &&
+          (honors[suit] || 0) >= minHonors &&
+          maxPreemptLevelForSuit(lengths[suit], vulnerability, suit) !== null
+        );
       });
       if (candidates.length) {
-        const honors = evaluation.top_honors_by_suit || {};
         const suit = candidates.slice().sort(function (a, b) {
           const ha = honors[a] || 0;
           const hb = honors[b] || 0;
@@ -539,7 +566,9 @@ function recommendOpening(evaluation, settings, vulnerability) {
             explanation:
               "你有 " +
               hcp +
-              " HCP，6-6 双套，应按套质量选择二阶弱二，并遵循有局宕二无局宕三（本次可宕 " +
+              " HCP，6-6 双套，应按套质量选择二阶弱二；当前局况要求长套至少 " +
+              minHonors +
+              " 张顶张大牌，并遵循有局宕二无局宕三（本次可宕 " +
               overbid +
               "），因此开叫 2" +
               suitSymbol(suit) +
@@ -558,7 +587,9 @@ function recommendOpening(evaluation, settings, vulnerability) {
             lengths[suit] +
             " 张 " +
             SUIT_NAMES[suit] +
-            "，可作二阶弱二，并遵循有局宕二无局宕三（本次可宕 " +
+            "，可作二阶弱二；当前局况要求长套至少 " +
+            minHonors +
+            " 张顶张大牌，并遵循有局宕二无局宕三（本次可宕 " +
             overbid +
             "），因此开叫 2" +
             suitSymbol(suit) +

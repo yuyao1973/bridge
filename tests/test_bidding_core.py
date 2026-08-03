@@ -140,7 +140,39 @@ class OpeningRecommendationTests(unittest.TestCase):
         self.assertEqual(recommend_opening(evaluation(12, 2, 3, 4, 4), vulnerability=VULNERABILITY).bid, "1♦")
 
     def test_weak_two_major(self) -> None:
-        self.assertEqual(recommend_opening(evaluation(8, 2, 6, 3, 2, balanced=False), vulnerability=VULNERABILITY).bid, "2♥")
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 2, 6, 3, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 1, "D": 0, "C": 0}),
+                vulnerability=VULNERABILITY,
+            ).bid,
+            "2♥",
+        )
+
+    def test_weak_two_requires_top_honor_when_nonvulnerable(self) -> None:
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 2, 6, 3, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 0}),
+                vulnerability=VULNERABILITY,
+            ).bid,
+            "Pass",
+        )
+
+    def test_weak_two_requires_two_top_honors_when_vulnerable(self) -> None:
+        # 有局 7 张可走弱二，但仅 1 张顶张不够
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 2, 7, 2, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 1, "D": 0, "C": 0}),
+                vulnerability="双方有局",
+            ).bid,
+            "Pass",
+        )
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 2, 7, 2, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 2, "D": 0, "C": 0}),
+                vulnerability="双方有局",
+            ).bid,
+            "2♥",
+        )
 
     def test_six_six_opens_better_quality_suit(self) -> None:
         # 6♥-6♦：红心质量更好 → 2♥
@@ -194,7 +226,7 @@ class OpeningRecommendationTests(unittest.TestCase):
         self.assertEqual(recommendation.rule_name, "6-6 双套弱二")
 
     def test_six_six_with_clubs_opens_other_weak_two_suit(self) -> None:
-        # 6♠-6♣：不使用弱 2♣，开 2♠
+        # 6♠-6♣：不使用弱 2♣，开 2♠（黑桃需满足无局至少1张顶张）
         self.assertEqual(
             recommend_opening(
                 evaluation(
@@ -204,7 +236,7 @@ class OpeningRecommendationTests(unittest.TestCase):
                     1,
                     6,
                     balanced=False,
-                    top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 2},
+                    top_honors_by_suit={"S": 1, "H": 0, "D": 0, "C": 2},
                 ),
                 vulnerability=VULNERABILITY,
             ).bid,
@@ -212,13 +244,19 @@ class OpeningRecommendationTests(unittest.TestCase):
         )
 
     def test_three_level_preempt_with_seven_card_suit(self) -> None:
-        self.assertEqual(recommend_opening(evaluation(8, 2, 2, 7, 2, balanced=False), vulnerability=VULNERABILITY).bid, "3♦")
-
-    def test_vulnerable_seven_card_opens_weak_two_not_three(self) -> None:
-        # 有局宕二：7 张约 6 墩 → 最高二阶，走弱二
         self.assertEqual(
             recommend_opening(
-                evaluation(8, 2, 7, 2, 2, balanced=False),
+                evaluation(8, 2, 2, 7, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 1, "C": 0}),
+                vulnerability=VULNERABILITY,
+            ).bid,
+            "3♦",
+        )
+
+    def test_vulnerable_seven_card_opens_weak_two_not_three(self) -> None:
+        # 有局宕二：7 张约 6 墩 → 最高二阶，走弱二（需2张顶张）
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 2, 7, 2, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 2, "D": 0, "C": 0}),
                 vulnerability="双方有局",
             ).bid,
             "2♥",
@@ -228,7 +266,7 @@ class OpeningRecommendationTests(unittest.TestCase):
         # 有局宕二：6 张约 5 墩 → 不足二阶，Pass
         self.assertEqual(
             recommend_opening(
-                evaluation(8, 2, 6, 3, 2, balanced=False),
+                evaluation(8, 2, 6, 3, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 2, "D": 0, "C": 0}),
                 vulnerability="双方有局",
             ).bid,
             "Pass",
@@ -237,7 +275,10 @@ class OpeningRecommendationTests(unittest.TestCase):
     def test_nonvulnerable_eight_card_minor_opens_four_not_five(self) -> None:
         # 无局宕三：8 张约 7 墩 → 四阶（不再因低花特判上五阶）
         self.assertEqual(
-            recommend_opening(evaluation(8, 2, 1, 2, 8, balanced=False), vulnerability=VULNERABILITY).bid,
+            recommend_opening(
+                evaluation(8, 2, 1, 2, 8, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 1}),
+                vulnerability=VULNERABILITY,
+            ).bid,
             "4♣",
         )
 
@@ -259,10 +300,31 @@ class OpeningRecommendationTests(unittest.TestCase):
         self.assertEqual(result.bid, "3♣")
 
     def test_four_level_preempt_with_eight_card_major(self) -> None:
-        self.assertEqual(recommend_opening(evaluation(8, 8, 2, 2, 1, balanced=False), vulnerability=VULNERABILITY).bid, "4♠")
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 8, 2, 2, 1, balanced=False, top_honors_by_suit={"S": 1, "H": 0, "D": 0, "C": 0}),
+                vulnerability=VULNERABILITY,
+            ).bid,
+            "4♠",
+        )
 
     def test_five_level_preempt_with_nine_card_minor(self) -> None:
-        self.assertEqual(recommend_opening(evaluation(8, 1, 1, 9, 2, balanced=False), vulnerability=VULNERABILITY).bid, "5♦")
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 1, 1, 9, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 1, "C": 0}),
+                vulnerability=VULNERABILITY,
+            ).bid,
+            "5♦",
+        )
+
+    def test_preempt_passes_without_enough_top_honors(self) -> None:
+        self.assertEqual(
+            recommend_opening(
+                evaluation(8, 2, 2, 7, 2, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 0}),
+                vulnerability=VULNERABILITY,
+            ).bid,
+            "Pass",
+        )
 
     def test_pass_when_below_opening_and_no_weak_two(self) -> None:
         self.assertEqual(recommend_opening(evaluation(5, 3, 3, 4, 3), vulnerability=VULNERABILITY).bid, "Pass")
@@ -965,6 +1027,18 @@ class RebidRecommendationTests(unittest.TestCase):
     def test_opener_rebid_after_one_club_one_heart_prefers_one_spade(self) -> None:
         hand = evaluation(12, 4, 1, 3, 5, balanced=False)
         result = recommend_opener_rebid("1♣", "1♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "1♠")
+        self.assertEqual(result.rule_name, "再叫第二套")
+
+    def test_opener_rebid_after_one_club_one_heart_balanced_with_four_spades_prefers_one_spade(self) -> None:
+        hand = evaluation(13, 4, 3, 3, 3)
+        result = recommend_opener_rebid("1♣", "1♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "1♠")
+        self.assertEqual(result.rule_name, "再叫第二套")
+
+    def test_opener_rebid_after_one_diamond_one_heart_with_four_spades_prefers_one_spade(self) -> None:
+        hand = evaluation(13, 4, 2, 5, 2, balanced=False)
+        result = recommend_opener_rebid("1♦", "1♥", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "1♠")
         self.assertEqual(result.rule_name, "再叫第二套")
 

@@ -327,9 +327,363 @@ function iterRolePairs(hands, prioritizeSequence, defaultOpener, defaultResponde
   return [[hands[defaultOpener], hands[defaultResponder]]]
 }
 
-function dealTargeted() {
-  // Disabled on miniprogram: nested search freezes the WeChat simulator watchdog.
+function dealTargeted(openerConstraint, responderConstraint, seed, maxOpenerAttempts = 80, _maxResponderAttempts = 1) {
+  // Single-shuffle loop (watchdog-safe). Both hands come from one deal.
+  const rng = new PythonRandom(seed)
+  const deck = new_deck()
+  const maxAttempts = Math.min(Math.max(maxOpenerAttempts || 80, 40), 200)
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    rng.shuffle(deck)
+    const openerHand = sort_hand(deck.slice(0, 13))
+    if (!openerConstraint(openerHand)) {
+      continue
+    }
+    const responderHand = sort_hand(deck.slice(13, 26))
+    if (!responderConstraint(responderHand)) {
+      continue
+    }
+    return [openerHand, responderHand]
+  }
   return null
+}
+
+function dealWithOpenerConstraint(openerConstraint, seed, maxAttempts = 80) {
+  // Lightweight single-loop construction: find an opener hand, take next 13 as responder.
+  const rng = new PythonRandom(seed)
+  const deck = new_deck()
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    rng.shuffle(deck)
+    const openerHand = sort_hand(deck.slice(0, 13))
+    if (!openerConstraint(openerHand)) {
+      continue
+    }
+    return {
+      openerHand,
+      responderHand: sort_hand(deck.slice(13, 26)),
+    }
+  }
+  return null
+}
+
+function getOpenerOnlyConstraint(openerBid, settings) {
+  if (openerBid === '1NT') {
+    return function nt1(hand) {
+      const ev = evaluate_hand(hand)
+      return qualifies_for_nt_opening_shape(ev) && settings.one_nt_min <= ev.hcp && ev.hcp <= settings.one_nt_max
+    }
+  }
+  if (openerBid === '2NT') {
+    return function nt2(hand) {
+      const ev = evaluate_hand(hand)
+      return qualifies_for_nt_opening_shape(ev) && ev.hcp >= 20 && ev.hcp <= 21
+    }
+  }
+  if (openerBid === '2♣') {
+    return function strongClub(hand) {
+      return evaluate_hand(hand).hcp >= settings.strong_two_club_min
+    }
+  }
+  if (openerBid === '1♥') {
+    return function hearts(hand) {
+      const ev = evaluate_hand(hand)
+      return ev.lengths.H >= 5 && ev.hcp >= settings.opening_min_hcp && ev.lengths.H >= ev.lengths.S
+    }
+  }
+  if (openerBid === '1♠') {
+    return function spades(hand) {
+      const ev = evaluate_hand(hand)
+      return ev.lengths.S >= 5 && ev.hcp >= settings.opening_min_hcp && ev.lengths.S >= ev.lengths.H
+    }
+  }
+  if (openerBid === '1♣') {
+    return function clubs(hand) {
+      const ev = evaluate_hand(hand)
+      return (
+        ev.hcp >= settings.opening_min_hcp &&
+        ev.lengths.S < 5 &&
+        ev.lengths.H < 5 &&
+        (ev.lengths.C > ev.lengths.D || (ev.lengths.C === 3 && ev.lengths.D === 3))
+      )
+    }
+  }
+  if (openerBid === '1♦') {
+    return function diamonds(hand) {
+      const ev = evaluate_hand(hand)
+      return (
+        ev.hcp >= settings.opening_min_hcp &&
+        ev.lengths.S < 5 &&
+        ev.lengths.H < 5 &&
+        (ev.lengths.D > ev.lengths.C || (ev.lengths.D === 4 && ev.lengths.C === 4))
+      )
+    }
+  }
+  if (openerBid === '3NT') {
+    return function gambling(hand) {
+      return choose_gambling_3nt_minor(evaluate_hand(hand), settings.opening_min_hcp) != null
+    }
+  }
+  if (PREEMPT_OPENINGS.has(openerBid)) {
+    const parsed = parse_contract_bid(openerBid)
+    if (parsed == null) {
+      return null
+    }
+    const level = parsed[0]
+    const suit = symbol_to_suit(parsed[1])
+    if (suit == null) {
+      return null
+    }
+    const minLength = ({ 2: 6, 3: 7, 4: 8, 5: 9 })[level] || 7
+    const hcpLo = level === 2 ? 6 : 5
+    const hcpHi = 10
+    return function preempt(hand) {
+      const ev = evaluate_hand(hand)
+      if (ev.hcp < hcpLo || ev.hcp > hcpHi) {
+        return false
+      }
+      const length = ev.lengths[suit]
+      if (length < minLength) {
+        return false
+      }
+      if (length < Math.max(ev.lengths.S, ev.lengths.H, ev.lengths.D, ev.lengths.C)) {
+        return false
+      }
+      return (ev.top_honors_by_suit[suit] || 0) >= 1
+    }
+  }
+  return null
+}
+
+function makeExactOpeningConstraint(openerBid, settings, vulnerability) {
+  return getOpenerOnlyConstraint(openerBid, settings)
+}
+
+function vulnerabilityForTargetedOpener(openerBid, seed) {
+  const vulnerability = chooseVulnerability(seed)
+  const parsed = parse_contract_bid(openerBid)
+  if (parsed != null && parsed[0] >= 4 && (vulnerability === '南北有局' || vulnerability === '双方有局')) {
+    return '双方无局'
+  }
+  return vulnerability
+}
+
+function tryGenerateResponseWithTargetedOpener(seed, openerBid, settings) {
+  const vulnerability = vulnerabilityForTargetedOpener(openerBid, seed)
+  const openerConstraint = getOpenerOnlyConstraint(openerBid, settings)
+  if (openerConstraint == null) {
+    return null
+  }
+  const targeted = dealWithOpenerConstraint(openerConstraint, seed, 160)
+  if (targeted == null) {
+    return null
+  }
+  const openerEvaluation = evaluate_hand(targeted.openerHand)
+  const openerRecommendation = recommend_opening(openerEvaluation, settings, vulnerability)
+  if (openerRecommendation.bid !== openerBid) {
+    return null
+  }
+  const evaluation = evaluate_hand(targeted.responderHand)
+  const recommendation = recommend_response(openerRecommendation.bid, evaluation, settings, vulnerability)
+  const legalChoices = legal_response_bids(openerRecommendation.bid)
+  return createTrainingQuestion({
+    hand: targeted.responderHand,
+    evaluation,
+    recommendation,
+    vulnerability,
+    choices: RESPONSE_BIDS,
+    legal_choices: legalChoices,
+    acceptable_bids: buildAcceptableBids(
+      recommendation.bid,
+      legalChoices,
+      'response',
+      openerRecommendation.bid,
+    ),
+    mode: '应叫训练',
+    auction: `${openerRecommendation.bid}-?`,
+    opener_bid: openerRecommendation.bid,
+  })
+}
+
+function makeResponseHandConstraint(openerBid, responseBid, settings, vulnerability) {
+  return function constraint(hand) {
+    const rec = recommend_response(openerBid, evaluate_hand(hand), settings, vulnerability)
+    if (rec.bid === 'Pass' && !PREEMPT_OPENINGS.has(openerBid)) {
+      return false
+    }
+    if (responseBid != null && rec.bid !== responseBid) {
+      return false
+    }
+    return true
+  }
+}
+
+function tryGenerateOpenerRebidWithTargeted(seed, openerBid, responseBid, settings, supportedOpenings) {
+  const vulnerability = vulnerabilityForTargetedOpener(openerBid, seed)
+  let openerConstraint = null
+  let responderConstraint = null
+  if (responseBid != null) {
+    const sequence = getSequenceConstraints(openerBid, responseBid, null, settings)
+    if (sequence != null) {
+      ;[openerConstraint, responderConstraint] = sequence
+    }
+  }
+  if (openerConstraint == null) {
+    openerConstraint = getOpenerOnlyConstraint(openerBid, settings)
+    if (openerConstraint == null) {
+      return null
+    }
+  }
+  if (responderConstraint == null) {
+    responderConstraint = makeResponseHandConstraint(openerBid, responseBid, settings, vulnerability)
+  }
+  const targeted = dealTargeted(openerConstraint, responderConstraint, seed, 160)
+  if (targeted == null) {
+    return null
+  }
+  const [openerHand, responderHand] = targeted
+  const openerEvaluation = evaluate_hand(openerHand)
+  const openingRecommendation = recommend_opening(openerEvaluation, settings, vulnerability)
+  if (!supportedOpenings.has(openingRecommendation.bid) || openingRecommendation.bid !== openerBid) {
+    return null
+  }
+  const responderEvaluation = evaluate_hand(responderHand)
+  const responseRecommendation = recommend_response(
+    openingRecommendation.bid,
+    responderEvaluation,
+    settings,
+    vulnerability,
+  )
+  if (responseRecommendation.bid === 'Pass' && !PREEMPT_OPENINGS.has(openingRecommendation.bid)) {
+    return null
+  }
+  if (responseBid != null && responseRecommendation.bid !== responseBid) {
+    return null
+  }
+  const recommendation = recommend_opener_rebid(
+    openingRecommendation.bid,
+    responseRecommendation.bid,
+    openerEvaluation,
+    settings,
+    vulnerability,
+  )
+  const legalChoices = legal_rebid_bids(responseRecommendation.bid)
+  return createTrainingQuestion({
+    hand: openerHand,
+    evaluation: openerEvaluation,
+    recommendation,
+    vulnerability,
+    choices: REBID_BIDS,
+    legal_choices: legalChoices,
+    acceptable_bids: buildAcceptableBids(
+      recommendation.bid,
+      legalChoices,
+      'opener_rebid',
+      openingRecommendation.bid,
+      responseRecommendation.bid,
+    ),
+    mode: '开叫者再叫训练',
+    auction: `${openingRecommendation.bid}-${responseRecommendation.bid}-? `,
+    opener_bid: openingRecommendation.bid,
+    response_bid: responseRecommendation.bid,
+  })
+}
+
+function tryGenerateResponderRebidWithTargeted(
+  seed,
+  openerBid,
+  responseBid,
+  openerRebidBid,
+  settings,
+  supportedOpenings,
+) {
+  const vulnerability = vulnerabilityForTargetedOpener(openerBid, seed)
+  let openerConstraint = null
+  let responderConstraint = null
+  if (responseBid != null && openerRebidBid != null) {
+    const sequence = getSequenceConstraints(openerBid, responseBid, openerRebidBid, settings)
+    if (sequence != null) {
+      ;[openerConstraint, responderConstraint] = sequence
+    }
+  } else if (responseBid != null) {
+    const sequence = getSequenceConstraints(openerBid, responseBid, null, settings)
+    if (sequence != null) {
+      ;[openerConstraint, responderConstraint] = sequence
+    }
+  }
+  if (openerConstraint == null) {
+    openerConstraint = getOpenerOnlyConstraint(openerBid, settings)
+    if (openerConstraint == null) {
+      return null
+    }
+  }
+  if (responderConstraint == null) {
+    responderConstraint = makeResponseHandConstraint(openerBid, responseBid, settings, vulnerability)
+  }
+  const targeted = dealTargeted(openerConstraint, responderConstraint, seed, 160)
+  if (targeted == null) {
+    return null
+  }
+  const [openerHand, responderHand] = targeted
+  const openerEvaluation = evaluate_hand(openerHand)
+  const responderEvaluation = evaluate_hand(responderHand)
+  const openingRecommendation = recommend_opening(openerEvaluation, settings, vulnerability)
+  if (!supportedOpenings.has(openingRecommendation.bid) || openingRecommendation.bid !== openerBid) {
+    return null
+  }
+  const responseRecommendation = recommend_response(
+    openingRecommendation.bid,
+    responderEvaluation,
+    settings,
+    vulnerability,
+  )
+  if (responseRecommendation.bid === 'Pass') {
+    return null
+  }
+  if (responseBid != null && responseRecommendation.bid !== responseBid) {
+    return null
+  }
+  const openerRebidRecommendation = recommend_opener_rebid(
+    openingRecommendation.bid,
+    responseRecommendation.bid,
+    openerEvaluation,
+    settings,
+    vulnerability,
+  )
+  if (openerRebidRecommendation.bid === 'Pass') {
+    return null
+  }
+  if (openerRebidBid != null && openerRebidRecommendation.bid !== openerRebidBid) {
+    return null
+  }
+  const recommendation = recommend_responder_rebid(
+    openingRecommendation.bid,
+    responseRecommendation.bid,
+    openerRebidRecommendation.bid,
+    responderEvaluation,
+    settings,
+    vulnerability,
+  )
+  const legalChoices = legal_responder_rebid_bids(openerRebidRecommendation.bid)
+  return createTrainingQuestion({
+    hand: responderHand,
+    evaluation: responderEvaluation,
+    recommendation,
+    vulnerability,
+    choices: RESPONDER_REBID_BIDS,
+    legal_choices: legalChoices,
+    acceptable_bids: buildAcceptableBids(
+      recommendation.bid,
+      legalChoices,
+      'responder_rebid',
+      openingRecommendation.bid,
+      responseRecommendation.bid,
+      openerRebidRecommendation.bid,
+    ),
+    mode: '应叫者第二次应叫训练',
+    auction: `${openingRecommendation.bid}-Pass-${responseRecommendation.bid}-Pass-${openerRebidRecommendation.bid}-Pass-? `,
+    opener_bid: openingRecommendation.bid,
+    response_bid: responseRecommendation.bid,
+    opener_rebid_bid: openerRebidRecommendation.bid,
+  })
 }
 
 function getSequenceConstraints(openerBid, responseBid, openerRebidBid, settings) {
@@ -651,6 +1005,14 @@ function generateResponseQuestion(
     resolvedOpenerBid = null
   }
   const baseSeed = seed != null ? seed : 1
+
+  if (resolvedOpenerBid != null) {
+    const targeted = tryGenerateResponseWithTargetedOpener(baseSeed, resolvedOpenerBid, resolvedSettings)
+    if (targeted != null) {
+      return targeted
+    }
+  }
+
   const attempts = searchAttemptBudget({ openerBid: resolvedOpenerBid })
 
   for (let offset = 0; offset < attempts; offset += 1) {
@@ -686,6 +1048,25 @@ function generateResponseQuestion(
       auction: `${openerRecommendation.bid}-?`,
       opener_bid: openerRecommendation.bid,
     })
+  }
+
+  if (resolvedOpenerBid != null) {
+    for (let extra = 0; extra < 20; extra += 1) {
+      const targeted = tryGenerateResponseWithTargetedOpener(
+        baseSeed + extra * 97003,
+        resolvedOpenerBid,
+        resolvedSettings,
+      )
+      if (targeted != null) {
+        return targeted
+      }
+    }
+    for (let extra = 0; extra < 16; extra += 1) {
+      const targeted = tryGenerateResponseWithTargetedOpener(extra * 4, resolvedOpenerBid, resolvedSettings)
+      if (targeted != null) {
+        return targeted
+      }
+    }
   }
 
   return generateOpeningQuestion(seed, resolvedSettings)
@@ -825,6 +1206,33 @@ function generateOpenerRebidQuestion(
     }
   }
 
+  if (resolvedOpenerBid != null) {
+    for (let extra = 0; extra < 20; extra += 1) {
+      const targeted = tryGenerateOpenerRebidWithTargeted(
+        baseSeed + extra * 97003,
+        resolvedOpenerBid,
+        resolvedResponseBid,
+        resolvedSettings,
+        supportedOpenings,
+      )
+      if (targeted != null) {
+        return targeted
+      }
+    }
+    for (let extra = 0; extra < 16; extra += 1) {
+      const targeted = tryGenerateOpenerRebidWithTargeted(
+        extra * 4,
+        resolvedOpenerBid,
+        resolvedResponseBid,
+        resolvedSettings,
+        supportedOpenings,
+      )
+      if (targeted != null) {
+        return targeted
+      }
+    }
+  }
+
   if (resolvedResponseBid != null) {
     return generateOpenerRebidQuestion(
       seed,
@@ -833,6 +1241,21 @@ function generateOpenerRebidQuestion(
       openerCategory,
       null,
     )
+  }
+
+  if (resolvedOpenerBid != null) {
+    for (let extra = 0; extra < 16; extra += 1) {
+      const targeted = tryGenerateOpenerRebidWithTargeted(
+        extra * 4 + 1,
+        resolvedOpenerBid,
+        null,
+        resolvedSettings,
+        supportedOpenings,
+      )
+      if (targeted != null) {
+        return targeted
+      }
+    }
   }
 
   return generateResponseQuestion(seed, resolvedOpenerBid, resolvedSettings, openerCategory)
@@ -1021,6 +1444,47 @@ function generateResponderRebidQuestion(
     }
   }
 
+  if (resolvedOpenerBid != null) {
+    const parsed = parse_contract_bid(resolvedOpenerBid)
+    const preemptFastFallback = (
+      PREEMPT_OPENINGS.has(resolvedOpenerBid) &&
+      resolvedOpenerBid !== '3NT' &&
+      parsed != null &&
+      parsed[0] >= 3 &&
+      resolvedResponseBid == null &&
+      resolvedOpenerRebidBid == null
+    )
+    const retryLimit = preemptFastFallback ? 4 : 20
+    for (let extra = 0; extra < retryLimit; extra += 1) {
+      const targeted = tryGenerateResponderRebidWithTargeted(
+        baseSeed + extra * 97003,
+        resolvedOpenerBid,
+        resolvedResponseBid,
+        resolvedOpenerRebidBid,
+        resolvedSettings,
+        supportedOpenings,
+      )
+      if (targeted != null) {
+        return targeted
+      }
+    }
+    if (!preemptFastFallback) {
+      for (let extra = 0; extra < 16; extra += 1) {
+        const targeted = tryGenerateResponderRebidWithTargeted(
+          extra * 4,
+          resolvedOpenerBid,
+          resolvedResponseBid,
+          resolvedOpenerRebidBid,
+          resolvedSettings,
+          supportedOpenings,
+        )
+        if (targeted != null) {
+          return targeted
+        }
+      }
+    }
+  }
+
   if (resolvedOpenerRebidBid != null) {
     return generateResponderRebidQuestion(
       seed,
@@ -1041,6 +1505,11 @@ function generateResponderRebidQuestion(
       null,
       null,
     )
+  }
+
+  if (resolvedOpenerBid != null) {
+    // High preempts often have no second response; keep the same opener via opener-rebid.
+    return generateOpenerRebidQuestion(seed, resolvedSettings, resolvedOpenerBid, openerCategory, null)
   }
 
   return generateResponseQuestion(seed, null, resolvedSettings, openerCategory)
@@ -1267,6 +1736,8 @@ module.exports = {
   directedSequenceAttemptBudget,
   iterRolePairs,
   dealTargeted,
+  dealWithOpenerConstraint,
+  getOpenerOnlyConstraint,
   getSequenceConstraints,
   generateOpeningQuestion,
   generateResponseQuestion,

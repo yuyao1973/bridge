@@ -334,12 +334,15 @@ function recommend_opening(evaluation, settings, vulnerability) {
     ));
   }
 
-  const preempt = settings.weak_two_enabled ? choose_preempt_opening(lengths, hcp, vulnerability) : null;
+  const preempt = settings.weak_two_enabled
+    ? choose_preempt_opening(lengths, hcp, vulnerability, evaluation.top_honors_by_suit)
+    : null;
   if (preempt !== null) {
     const overbid = preempt_overbid_allowance(vulnerability);
+    const minHonors = preempt_min_top_honors(vulnerability);
     return finish(bidRecommendation(
       preempt,
-      `${hcp} HCP，持有长套，按有局宕二无局宕三（本次可宕 ${overbid}）开叫阻击 ${preempt}。牌型：${length_text}。`,
+      `${hcp} HCP，持有长套，按有局宕二无局宕三（本次可宕 ${overbid}）且长套至少 ${minHonors} 张顶张大牌开叫阻击 ${preempt}。牌型：${length_text}。`,
       "阻击开叫",
     ));
   }
@@ -350,16 +353,17 @@ function recommend_opening(evaluation, settings, vulnerability) {
   if (weak_two !== null) {
     const sixCardSuits = ["S", "H", "D", "C"].filter((suit) => lengths[suit] === 6);
     const overbid = preempt_overbid_allowance(vulnerability);
+    const minHonors = preempt_min_top_honors(vulnerability);
     if (sixCardSuits.length >= 2) {
       return finish(bidRecommendation(
         `2${suit_symbol(weak_two)}`,
-        `${hcp} HCP，6-6 双套，按套质量并遵循有局宕二无局宕三（本次可宕 ${overbid}）开叫二阶 ${SUIT_NAMES[weak_two]}。当前训练不使用弱 2♣。牌型：${length_text}。`,
+        `${hcp} HCP，6-6 双套，按套质量并遵循有局宕二无局宕三（本次可宕 ${overbid}）、长套至少 ${minHonors} 张顶张开叫二阶 ${SUIT_NAMES[weak_two]}。当前训练不使用弱 2♣。牌型：${length_text}。`,
         "6-6 双套弱二",
       ));
     }
     return finish(bidRecommendation(
       `2${suit_symbol(weak_two)}`,
-      `${hcp} HCP，持有 ${lengths[weak_two]} 张 ${SUIT_NAMES[weak_two]}，按有局宕二无局宕三（本次可宕 ${overbid}）作二阶弱二开叫。当前训练不使用弱 2♣。牌型：${length_text}。`,
+      `${hcp} HCP，持有 ${lengths[weak_two]} 张 ${SUIT_NAMES[weak_two]}，按有局宕二无局宕三（本次可宕 ${overbid}）且长套至少 ${minHonors} 张顶张作二阶弱二开叫。当前训练不使用弱 2♣。牌型：${length_text}。`,
       "弱二开叫",
     ));
   }
@@ -1245,6 +1249,27 @@ function recommend_opener_rebid(opening_bid, response_bid, evaluation, settings,
     );
   }
 
+  // 一阶开叫-一阶应叫后：优先保留可叫的一阶第二套（如 1♣-1♥-1♠）。
+  // 特例：同伴应叫 1♥ 且持有 4 张♠ 时，须先于均型 1NT/2NT 再叫 1♠。
+  if (opening_level === 1 && response_level === 1) {
+    const one_level_second_suit = choose_one_level_second_suit(
+      lengths,
+      opener_suit,
+      response_suit,
+      response_bid,
+    );
+    if (one_level_second_suit !== null) {
+      const one_level_bid = minimum_legal_bid_for_suit(one_level_second_suit, response_bid, 1);
+      if (one_level_bid !== null) {
+        return bidRecommendation(
+          one_level_bid,
+          `你开叫 ${opening_bid} 后还有 4 张以上第二套 ${SUIT_NAMES[one_level_second_suit]}，再叫新花 ${one_level_bid} 描述牌型。牌型：${length_text}。`,
+          "再叫第二套",
+        );
+      }
+    }
+  }
+
   if (evaluation.balanced) {
     const strong_nt_min = Math.max(17, 18 + game_adjustment);
     const weak_nt_max = Math.min(15, 14 + game_adjustment);
@@ -1264,30 +1289,12 @@ function recommend_opener_rebid(opening_bid, response_bid, evaluation, settings,
     }
   }
 
-  // 一阶开叫-一阶应叫后：
-  // - 优先保留可叫的一阶第二套（如 1♣-1♥-1♠）
-  // - 均型低限，或非均型且单缺同伴应叫花色，可再叫 1NT
+  // 一阶开叫-一阶应叫后：均型低限，或非均型且单缺同伴应叫花色，可再叫 1NT。
   const opener_length = opener_suit !== null ? lengths[opener_suit] : 0;
   const has_singleton_or_void = Math.min(lengths.S, lengths.H, lengths.D, lengths.C) <= 1;
   const shortage_in_response_suit =
     ["H", "S"].includes(response_suit) && lengths[response_suit] <= 1;
   if (opening_level === 1 && response_level === 1) {
-    const one_level_second_suit = choose_one_level_second_suit(
-      lengths,
-      opener_suit,
-      response_suit,
-      response_bid,
-    );
-    if (one_level_second_suit !== null) {
-      const one_level_bid = minimum_legal_bid_for_suit(one_level_second_suit, response_bid, 1);
-      if (one_level_bid !== null) {
-        return bidRecommendation(
-          one_level_bid,
-          `你开叫 ${opening_bid} 后还有 4 张以上第二套 ${SUIT_NAMES[one_level_second_suit]}，再叫新花 ${one_level_bid} 描述牌型。牌型：${length_text}。`,
-          "再叫第二套",
-        );
-      }
-    }
     if (
       hcp >= 12 &&
       hcp <= 14 &&
@@ -2295,10 +2302,11 @@ const OPENING_RULE_PRINCIPLES = {
   "拼搏式 3NT":
     "开叫训练原则第8条：7张以上坚固低花（含 AKQ），边张无 A/K/Q，且未达一阶开叫点力时开拼搏式 3NT（优先于同档阻击）。",
   "阻击开叫":
-    "开叫训练原则第9条：5-10 HCP 且7张以上长套，按套长作 3/4/5 阶阻击，并遵循有局宕二、无局宕三。",
+    "开叫训练原则第9条：5-10 HCP 且7张以上长套，按套长作 3/4/5 阶阻击；无局至少1张顶张大牌，有局至少2张；并遵循有局宕二、无局宕三。",
   "弱二开叫":
-    "开叫训练原则第10条：6-10 HCP 且6张以上套，二阶弱二开 2♦/2♥/2♠（不使用弱 2♣），并遵循有局宕二、无局宕三。",
-  "6-6 双套弱二": "开叫训练原则第11条：6-10 HCP 且6-6双套，开二阶质量最好的套。",
+    "开叫训练原则第10条：6-10 HCP 且6张以上套，二阶弱二开 2♦/2♥/2♠（不使用弱 2♣）；无局至少1张顶张大牌，有局至少2张；并遵循有局宕二、无局宕三。",
+  "6-6 双套弱二":
+    "开叫训练原则第11条：6-10 HCP 且6-6双套，在满足顶张质量的可开弱二花色中开质量最好的套。",
   "不叫": "开叫训练原则第12条：不满足以上开叫条件时 Pass。",
 };
 
@@ -2330,6 +2338,10 @@ function with_opening_principle(explanation, rule_name) {
 
 function preempt_overbid_allowance(vulnerability) {
   return ns_is_vulnerable(vulnerability) ? 2 : 3;
+}
+
+function preempt_min_top_honors(vulnerability) {
+  return ns_is_vulnerable(vulnerability) ? 2 : 1;
 }
 
 function estimate_long_suit_playing_tricks(length) {
@@ -2974,8 +2986,13 @@ function choose_weak_two(lengths, hcp, topHonorsBySuit, vulnerability) {
   if (!(hcp >= 6 && hcp <= 10)) {
     return null;
   }
+  const honors = topHonorsBySuit || {};
+  const minHonors = preempt_min_top_honors(vulnerability);
   const candidates = ["S", "H", "D"].filter(
-    (suit) => lengths[suit] >= 6 && max_preempt_level_for_suit(lengths[suit], vulnerability, suit) !== null,
+    (suit) =>
+      lengths[suit] >= 6 &&
+      (honors[suit] || 0) >= minHonors &&
+      max_preempt_level_for_suit(lengths[suit], vulnerability, suit) !== null,
   );
   if (!candidates.length) {
     return null;
@@ -2983,20 +3000,39 @@ function choose_weak_two(lengths, hcp, topHonorsBySuit, vulnerability) {
   return maxWeakTwoCandidate(candidates, lengths, topHonorsBySuit);
 }
 
-function choose_preempt_opening(lengths, hcp, vulnerability) {
+function choose_preempt_opening(lengths, hcp, vulnerability, topHonorsBySuit) {
   if (!(hcp >= 5 && hcp <= 10)) {
     return null;
   }
-  const suit = maxPreemptCandidate(lengths);
-  const length = lengths[suit];
-  if (length < 7) {
+  const honors = topHonorsBySuit || {};
+  const minHonors = preempt_min_top_honors(vulnerability);
+  const candidates = [];
+  for (const suit of ["S", "H", "D", "C"]) {
+    const length = lengths[suit];
+    if (length < 7 || (honors[suit] || 0) < minHonors) {
+      continue;
+    }
+    const level = max_preempt_level_for_suit(length, vulnerability, suit);
+    if (level === null || level < 3) {
+      continue;
+    }
+    candidates.push({ suit, level });
+  }
+  if (!candidates.length) {
     return null;
   }
-  const level = max_preempt_level_for_suit(length, vulnerability, suit);
-  if (level === null || level < 3) {
-    return null;
-  }
-  return `${level}${suit_symbol(suit)}`;
+  candidates.sort((a, b) => {
+    if (lengths[b.suit] !== lengths[a.suit]) {
+      return lengths[b.suit] - lengths[a.suit];
+    }
+    const rank = { S: 3, H: 2, D: 1, C: 0 };
+    if (rank[b.suit] !== rank[a.suit]) {
+      return rank[b.suit] - rank[a.suit];
+    }
+    return b.level - a.level;
+  });
+  const best = candidates[0];
+  return `${best.level}${suit_symbol(best.suit)}`;
 }
 
 function choose_gambling_3nt_minor(evaluation, opening_min_hcp) {
@@ -3097,6 +3133,7 @@ module.exports = {
   has_suit_stopper,
   qualifies_for_nt_opening_shape,
   preempt_overbid_allowance,
+  preempt_min_top_honors,
   recommend_response_to_gambling_3nt,
   get_splinter_bid,
   find_splinter_suit,

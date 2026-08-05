@@ -794,6 +794,10 @@ def contextual_responder_rebid_meaning(bid: str, auction_bids: list[str]) -> str
                 return f"在 {seq} 后再叫 2NT：Stayman 后无将邀局。"
             if bid == "3NT":
                 return f"在 {seq} 后再叫 3NT：Stayman 后确认无将进局。"
+            if bid == "4NT":
+                return f"在 {seq} 后再叫 4NT：Stayman 后高花配合，A 张问叫试探满贯。"
+            if responder2[1] in {"♣", "♦"} and responder2[0] == 3:
+                return f"在 {seq} 后再叫 {bid}：Stayman 后无高花配合，以 3 阶低花试探进局或满贯。"
             if responder2[1] in {"♥", "♠"}:
                 return f"在 {seq} 后再叫 {bid}：Stayman 后确认高花配合并推进定约层级。"
         if responder2[1] == "NT":

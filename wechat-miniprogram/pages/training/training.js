@@ -570,6 +570,12 @@ Page({
         if (bid === '3NT') {
           return `在 ${seq} 后再叫 3NT：Stayman 后确认无将进局。`
         }
+        if (bid === '4NT') {
+          return `在 ${seq} 后再叫 4NT：Stayman 后高花配合，A 张问叫试探满贯。`
+        }
+        if ((responder2.strain === '♣' || responder2.strain === '♦') && responder2.level === 3) {
+          return `在 ${seq} 后再叫 ${bid}：Stayman 后无高花配合，以 3 阶低花试探进局或满贯。`
+        }
         if (responder2.strain === '♥' || responder2.strain === '♠') {
           return `在 ${seq} 后再叫 ${bid}：Stayman 后确认高花配合并推进定约层级。`
         }

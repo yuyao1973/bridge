@@ -1476,6 +1476,236 @@ def symbol_to_suit(strain: str) -> str | None:
     return {"♣": "C", "♦": "D", "♥": "H", "♠": "S"}.get(strain)
 
 
+def choose_major_transfer_side_suit_bid(
+    lengths: dict[str, int],
+    major_suit: str,
+    previous_bid: str,
+    min_length: int,
+) -> tuple[str, str] | None:
+    """Pick a natural side-suit follow-up after major transfer; return (suit, bid)."""
+    candidates: list[tuple[str, str, int]] = []
+    for suit in ["S", "H", "D", "C"]:
+        if suit == major_suit or lengths[suit] < min_length:
+            continue
+        bid = minimum_legal_bid_for_suit(suit, previous_bid, minimum_level=2)
+        if bid is None:
+            continue
+        candidates.append((suit, bid, lengths[suit]))
+    if not candidates:
+        return None
+    suit_rank = {"S": 4, "H": 3, "D": 2, "C": 1}
+    suit, bid, _ = max(candidates, key=lambda item: (item[2], suit_rank[item[0]]))
+    return suit, bid
+
+
+def recommend_after_major_transfer_completion(
+    major_suit: str,
+    opener_rebid_bid: str,
+    evaluation: HandEvaluation,
+    nt_resp_invite_low: int,
+    nt_resp_invite_high: int,
+    nt_resp_game_hcp: int,
+    slam_try_hcp: int,
+) -> BidRecommendation:
+    """1NT 高花转移完成后的应叫者再叫（README 应叫者第二次应叫第6条）。"""
+    hcp = evaluation.hcp
+    lengths = evaluation.lengths
+    length_text = describe_lengths(evaluation)
+    major_symbol = suit_symbol(major_suit)
+    major_name = SUIT_NAMES[major_suit]
+    major_label = "红心" if major_suit == "H" else "黑桃"
+
+    # 满贯试探（>=15）：叫新花（保证 3 张）
+    if hcp >= slam_try_hcp:
+        side = choose_major_transfer_side_suit_bid(lengths, major_suit, opener_rebid_bid, min_length=3)
+        if side is not None:
+            side_suit, side_bid = side
+            return BidRecommendation(
+                side_bid,
+                (
+                    f"{major_label}转移完成后，你有 {hcp} HCP，满贯试探再叫新花 {side_bid}"
+                    f"（保证至少 3 张 {SUIT_NAMES[side_suit]}）。牌型：{length_text}。"
+                ),
+                "转移后满贯试探新花",
+            )
+        game_bid = f"4{major_symbol}"
+        if lengths[major_suit] >= 6 and is_legal_response_bid(opener_rebid_bid, game_bid):
+            return BidRecommendation(
+                game_bid,
+                f"{major_label}转移完成后，你有 {hcp} HCP 和 {lengths[major_suit]} 张{major_name}，无合适新花时先确立成局 {game_bid}。牌型：{length_text}。",
+                "转移后高花进局",
+            )
+        if is_legal_response_bid(opener_rebid_bid, "4NT"):
+            return BidRecommendation(
+                "4NT",
+                f"{major_label}转移完成后，你有 {hcp} HCP，无合适新花时以 4NT 试探满贯。牌型：{length_text}。",
+                "转移后满贯试探",
+            )
+
+    # 进局牌力（10-14）：4M（6+）/ 3NT（均型，其余默认 3NT）
+    if hcp >= nt_resp_game_hcp:
+        game_bid = f"4{major_symbol}"
+        if lengths[major_suit] >= 6 and is_legal_response_bid(opener_rebid_bid, game_bid):
+            return BidRecommendation(
+                game_bid,
+                f"{major_label}转移完成后，你有 {hcp} HCP 和 {lengths[major_suit]} 张{major_name}，直接进 {game_bid} 封局。牌型：{length_text}。",
+                "转移后高花进局",
+            )
+        if is_legal_response_bid(opener_rebid_bid, "3NT"):
+            shape_note = "均型牌，" if evaluation.balanced else ""
+            return BidRecommendation(
+                "3NT",
+                f"{major_label}转移完成后，你有 {hcp} HCP，{shape_note}选择 3NT 进无将局。牌型：{length_text}。",
+                "转移后无将进局",
+            )
+
+    # 邀叫牌力（8-9）：3M（6+）/ 2NT（均型）/ 第二套（非均型）
+    if nt_resp_invite_low <= hcp <= nt_resp_invite_high:
+        invite_raise = f"3{major_symbol}"
+        if lengths[major_suit] >= 6 and is_legal_response_bid(opener_rebid_bid, invite_raise):
+            return BidRecommendation(
+                invite_raise,
+                f"{major_label}转移完成后，你有 {hcp} HCP 和 {lengths[major_suit]} 张{major_name}，加叫至 {invite_raise} 邀局。牌型：{length_text}。",
+                "转移后高花邀局",
+            )
+        if evaluation.balanced and is_legal_response_bid(opener_rebid_bid, "2NT"):
+            return BidRecommendation(
+                "2NT",
+                f"{major_label}转移完成后，你有 {hcp} HCP 均型牌，叫 2NT 邀局。牌型：{length_text}。",
+                "转移后无将邀局",
+            )
+        side = choose_major_transfer_side_suit_bid(lengths, major_suit, opener_rebid_bid, min_length=4)
+        if side is not None:
+            side_suit, side_bid = side
+            return BidRecommendation(
+                side_bid,
+                (
+                    f"{major_label}转移完成后，你有 {hcp} HCP 非均型牌，再叫第二套 {side_bid}"
+                    f"（{SUIT_NAMES[side_suit]} {lengths[side_suit]} 张）邀局。牌型：{length_text}。"
+                ),
+                "转移后第二套邀局",
+            )
+        if is_legal_response_bid(opener_rebid_bid, "2NT"):
+            return BidRecommendation(
+                "2NT",
+                f"{major_label}转移完成后，你有 {hcp} HCP，无清晰第二套时叫 2NT 邀局。牌型：{length_text}。",
+                "转移后无将邀局",
+            )
+
+    return BidRecommendation(
+        "Pass",
+        f"{major_label}转移完成后，你有 {hcp} HCP（弱牌），建议 Pass。牌型：{length_text}。",
+        "转移后止叫",
+    )
+
+
+def choose_stayman_minor_probe_bid(
+    lengths: dict[str, int],
+    previous_bid: str,
+) -> tuple[str, str] | None:
+    """Stayman 后无高花配合：5+ 低花且有单缺时，试探 3 阶低花。"""
+    if min(lengths.values()) > 1:
+        return None
+    candidates: list[tuple[str, str, int]] = []
+    for suit in ["D", "C"]:
+        if lengths[suit] < 5:
+            continue
+        bid = f"3{suit_symbol(suit)}"
+        if not is_legal_response_bid(previous_bid, bid):
+            continue
+        candidates.append((suit, bid, lengths[suit]))
+    if not candidates:
+        return None
+    suit, bid, _ = max(candidates, key=lambda item: (item[2], item[0] == "D"))
+    return suit, bid
+
+
+def recommend_after_stayman_rebid(
+    opener_rebid_bid: str,
+    evaluation: HandEvaluation,
+    fit_suit: str | None,
+    fit_strain: str | None,
+    nt_resp_invite_low: int,
+    nt_resp_invite_high: int,
+    nt_resp_game_hcp: int,
+    slam_try_hcp: int,
+) -> BidRecommendation:
+    """1NT-2♣ Stayman 后应叫者再叫（README 应叫者第二次应叫第7条）。"""
+    hcp = evaluation.hcp
+    lengths = evaluation.lengths
+    length_text = describe_lengths(evaluation)
+    sequence = f"1NT-2♣-{opener_rebid_bid}"
+    has_fit = fit_suit is not None and lengths[fit_suit] >= 4
+
+    # 高花配合：邀局 3M / 进局 4M / 满贯试探 4NT
+    if has_fit and fit_suit is not None and fit_strain is not None:
+        if hcp >= slam_try_hcp and is_legal_response_bid(opener_rebid_bid, "4NT"):
+            return BidRecommendation(
+                "4NT",
+                f"{sequence} 后，你有 {hcp} HCP 和 {lengths[fit_suit]} 张 {SUIT_NAMES[fit_suit]} 配合，叫 4NT 作关键张问叫试探满贯。牌型：{length_text}。",
+                "Stayman 后满贯试探 4NT",
+            )
+        if hcp >= nt_resp_game_hcp:
+            major_game = f"4{fit_strain}"
+            if is_legal_response_bid(opener_rebid_bid, major_game):
+                return BidRecommendation(
+                    major_game,
+                    f"{sequence} 后，你有 {hcp} HCP 和 {lengths[fit_suit]} 张 {SUIT_NAMES[fit_suit]} 配合，叫 {major_game} 进高花局。牌型：{length_text}。",
+                    "Stayman 后高花进局",
+                )
+        if nt_resp_invite_low <= hcp <= nt_resp_invite_high:
+            major_invite = f"3{fit_strain}"
+            if is_legal_response_bid(opener_rebid_bid, major_invite):
+                return BidRecommendation(
+                    major_invite,
+                    f"{sequence} 后，你有 {hcp} HCP 和 {lengths[fit_suit]} 张 {SUIT_NAMES[fit_suit]} 配合，叫 {major_invite} 邀局。牌型：{length_text}。",
+                    "Stayman 后高花邀局",
+                )
+        return BidRecommendation(
+            "Pass",
+            f"{sequence} 后虽有高花配合，但你仅有 {hcp} HCP，牌力不足以邀局，建议 Pass。牌型：{length_text}。",
+            "Stayman 后止叫",
+        )
+
+    # 高花不配合：2NT 邀局 / 3NT 进局 / 3 阶低花试探
+    deny = opener_rebid_bid == "2♦"
+    unsuitable_for_nt = not evaluation.balanced and min(lengths.values()) <= 1
+    if hcp >= nt_resp_invite_low and unsuitable_for_nt:
+        minor_probe = choose_stayman_minor_probe_bid(lengths, opener_rebid_bid)
+        if minor_probe is not None:
+            minor_suit, minor_bid = minor_probe
+            return BidRecommendation(
+                minor_bid,
+                (
+                    f"{sequence} 后无高花配合；你有 {hcp} HCP、{lengths[minor_suit]} 张 "
+                    f"{SUIT_NAMES[minor_suit]} 且有单缺，不适合打无将，叫 {minor_bid} 试探低花进局或满贯。牌型：{length_text}。"
+                ),
+                "Stayman 后低花试探",
+            )
+
+    if (
+        hcp >= nt_resp_game_hcp
+        and evaluation.balanced
+        and is_legal_response_bid(opener_rebid_bid, "3NT")
+    ):
+        return BidRecommendation(
+            "3NT",
+            f"{sequence} 后无高花配合；你有 {hcp} HCP 均型牌，叫 3NT 进无将局。牌型：{length_text}。",
+            "Stayman 否定后无将进局" if deny else "Stayman 后无将进局",
+        )
+    if nt_resp_invite_low <= hcp <= nt_resp_invite_high and is_legal_response_bid(opener_rebid_bid, "2NT"):
+        return BidRecommendation(
+            "2NT",
+            f"{sequence} 后无高花配合；你有 {hcp} HCP，叫 2NT 邀局。牌型：{length_text}。",
+            "Stayman 否定后无将邀局" if deny else "Stayman 后无将邀局",
+        )
+    return BidRecommendation(
+        "Pass",
+        f"{sequence} 后无高花配合；你有 {hcp} HCP，牌力不足以邀局，建议 Pass。牌型：{length_text}。",
+        "Stayman 否定后止叫" if deny else "Stayman 后止叫",
+    )
+
+
 def recommend_responder_rebid(
     opening_bid: str,
     response_bid: str,
@@ -1640,119 +1870,48 @@ def recommend_responder_rebid(
         nt_resp_invite_low = max(6, 8 + game_adjustment_nt)
         nt_resp_invite_high = nt_resp_game_hcp - 1
 
-        # Stayman 否定序列：1NT - 2♣ - 2♦（未找到 4 张高花），应叫者转入无将分档。
-        if response_bid == "2♣" and opener_rebid_bid == "2♦":
-            if hcp >= nt_resp_game_hcp and is_legal_response_bid(opener_rebid_bid, "3NT"):
-                return BidRecommendation(
-                    "3NT",
-                    f"1NT-2♣-2♦ 序列中，开叫者否定 4 张高花；你有 {hcp} HCP，叫 3NT 进无将局。牌型：{length_text}。",
-                    "Stayman 否定后无将进局",
-                )
-            if nt_resp_invite_low <= hcp <= nt_resp_invite_high and is_legal_response_bid(opener_rebid_bid, "2NT"):
-                return BidRecommendation(
-                    "2NT",
-                    f"1NT-2♣-2♦ 序列中，开叫者否定 4 张高花；你有 {hcp} HCP，叫 2NT 邀局。牌型：{length_text}。",
-                    "Stayman 否定后无将邀局",
-                )
-            return BidRecommendation(
-                "Pass",
-                f"1NT-2♣-2♦ 序列中，开叫者否定 4 张高花；你有 {hcp} HCP，牌力不足以邀局，建议 Pass。牌型：{length_text}。",
-                "Stayman 否定后止叫",
+        nt_resp_slam_hcp = max(15, 15 + game_adjustment_nt)
+
+        # Stayman：1NT - 2♣ - 2♦/2♥/2♠
+        # 有配合：3M 邀局 / 4M 进局 / 4NT 满贯；无配合：2NT / 3NT / 3m 低花试探
+        if response_bid == "2♣" and opener_rebid_bid in {"2♦", "2♥", "2♠"}:
+            fit_suit: str | None = None
+            fit_strain: str | None = None
+            if opener_rebid_bid in {"2♥", "2♠"} and opener_suit is not None:
+                fit_suit = opener_suit
+                fit_strain = opener_strain
+            return recommend_after_stayman_rebid(
+                opener_rebid_bid,
+                evaluation,
+                fit_suit,
+                fit_strain,
+                nt_resp_invite_low,
+                nt_resp_invite_high,
+                nt_resp_game_hcp,
+                nt_resp_slam_hcp,
             )
 
-        # Stayman 序列：1NT - 2♣ - 2♥/2♠（找到高花配合）
-        if response_bid == "2♣" and opener_strain in {"♥", "♠"} and opener_suit is not None:
-            if lengths[opener_suit] >= 4:
-                # 有 4 张配合，按牌力选择加叫层级
-                if hcp >= nt_resp_game_hcp:
-                    major_game = f"4{opener_strain}"
-                    if is_legal_response_bid(opener_rebid_bid, major_game):
-                        return BidRecommendation(
-                            major_game,
-                            f"1NT-2♣-{opener_rebid_bid} 序列后，你有 {hcp} HCP 和 {lengths[opener_suit]} 张配合，叫 {major_game} 进高花局。牌型：{length_text}。",
-                            "Stayman 后高花进局",
-                        )
-                if hcp >= nt_resp_invite_low:
-                    major_invite = f"3{opener_strain}"
-                    if is_legal_response_bid(opener_rebid_bid, major_invite):
-                        return BidRecommendation(
-                            major_invite,
-                            f"1NT-2♣-{opener_rebid_bid} 序列后，你有 {hcp} HCP 和 {lengths[opener_suit]} 张配合，叫 {major_invite} 邀请高花局。牌型：{length_text}。",
-                            "Stayman 后高花邀局",
-                        )
-            # 无 4 张配合或牌力不足，按 HCP 选 NT 层级
-            if hcp >= nt_resp_game_hcp and is_legal_response_bid(opener_rebid_bid, "3NT"):
-                return BidRecommendation(
-                    "3NT",
-                    f"1NT-2♣-{opener_rebid_bid} 序列后，你有 {hcp} HCP，无高花配合，叫 3NT 进无将局。牌型：{length_text}。",
-                    "Stayman 后无将进局",
-                )
-            if hcp >= nt_resp_invite_low and is_legal_response_bid(opener_rebid_bid, "2NT"):
-                return BidRecommendation(
-                    "2NT",
-                    f"1NT-2♣-{opener_rebid_bid} 序列后，你有 {hcp} HCP，邀请无将局。牌型：{length_text}。",
-                    "Stayman 后无将邀局",
-                )
-            return BidRecommendation(
-                "Pass",
-                f"1NT-2♣-{opener_rebid_bid} 序列后，你有 {hcp} HCP，牌力不足以邀局，建议 Pass。牌型：{length_text}。",
-                "Stayman 后止叫",
-            )
-
-        # 转移序列：1NT - 2♦ - 2♥（红心转移完成）
+        # 转移序列：1NT - 2♦ - 2♥ / 1NT - 2♥ - 2♠（高花转移完成）
+        # 弱牌(<7) Pass；邀叫(8-9) 3M/2NT/第二套；进局(10-14) 4M/3NT；满贯试探(>=15) 新花
         if response_bid == "2♦" and opener_rebid_bid == "2♥":
-            if hcp >= nt_resp_game_hcp:
-                if lengths["H"] >= 6 and is_legal_response_bid("2♥", "4♥"):
-                    return BidRecommendation(
-                        "4♥",
-                        f"红心转移完成后，你有 {hcp} HCP 和 {lengths['H']} 张红心，直接进 4♥。牌型：{length_text}。",
-                        "转移后高花进局",
-                    )
-                if is_legal_response_bid("2♥", "3NT"):
-                    return BidRecommendation(
-                        "3NT",
-                        f"红心转移完成后，你有 {hcp} HCP，选择 3NT 进无将局。牌型：{length_text}。",
-                        "转移后无将进局",
-                    )
-            if hcp >= nt_resp_invite_low:
-                if is_legal_response_bid("2♥", "2NT"):
-                    return BidRecommendation(
-                        "2NT",
-                        f"红心转移完成后，你有 {hcp} HCP，叫 2NT 邀局。牌型：{length_text}。",
-                        "转移后邀局",
-                    )
-            return BidRecommendation(
-                "Pass",
-                f"红心转移完成后，你有 {hcp} HCP，牌力不足进局，建议 Pass。牌型：{length_text}。",
-                "转移后止叫",
+            return recommend_after_major_transfer_completion(
+                "H",
+                opener_rebid_bid,
+                evaluation,
+                nt_resp_invite_low,
+                nt_resp_invite_high,
+                nt_resp_game_hcp,
+                nt_resp_slam_hcp,
             )
-
-        # 转移序列：1NT - 2♥ - 2♠（黑桃转移完成）
         if response_bid == "2♥" and opener_rebid_bid == "2♠":
-            if hcp >= nt_resp_game_hcp:
-                if lengths["S"] >= 6 and is_legal_response_bid("2♠", "4♠"):
-                    return BidRecommendation(
-                        "4♠",
-                        f"黑桃转移完成后，你有 {hcp} HCP 和 {lengths['S']} 张黑桃，直接进 4♠。牌型：{length_text}。",
-                        "转移后高花进局",
-                    )
-                if is_legal_response_bid("2♠", "3NT"):
-                    return BidRecommendation(
-                        "3NT",
-                        f"黑桃转移完成后，你有 {hcp} HCP，选择 3NT 进无将局。牌型：{length_text}。",
-                        "转移后无将进局",
-                    )
-            if hcp >= nt_resp_invite_low:
-                if is_legal_response_bid("2♠", "2NT"):
-                    return BidRecommendation(
-                        "2NT",
-                        f"黑桃转移完成后，你有 {hcp} HCP，叫 2NT 邀局。牌型：{length_text}。",
-                        "转移后邀局",
-                    )
-            return BidRecommendation(
-                "Pass",
-                f"黑桃转移完成后，你有 {hcp} HCP，牌力不足进局，建议 Pass。牌型：{length_text}。",
-                "转移后止叫",
+            return recommend_after_major_transfer_completion(
+                "S",
+                opener_rebid_bid,
+                evaluation,
+                nt_resp_invite_low,
+                nt_resp_invite_high,
+                nt_resp_game_hcp,
+                nt_resp_slam_hcp,
             )
 
         # 低花转移后续：1NT - 2♠ - 3♣

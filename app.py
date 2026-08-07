@@ -818,6 +818,8 @@ def contextual_responder_rebid_meaning(bid: str, auction_bids: list[str]) -> str
             return f"在 {seq} 后再叫 {bid}：1M-1NT 后继续开叫高花（邀局/进局）。"
         if bid in {"3♥", "4♥"} and opening[1] == "♠" and auction_bids[2] == "2♥":
             return f"在 {seq} 后再叫 {bid}：1♠-1NT-2♥ 后支持红心。"
+        if bid in {f"3{opening[1]}", f"4{opening[1]}"} and auction_bids[2] in {"2♣", "2♦"}:
+            return f"在 {seq} 后再叫 {bid}：1M-1NT 后再叫低花后，两套支持或高花支持继续。"
         if bid in {"3♣", "3♦"}:
             return f"在 {seq} 后再叫 {bid}：1M-1NT 后加叫低花或试探低花成局/满贯。"
         if bid in {"2♣", "2♦", "2♥", "2♠"} and bid != auction_bids[2]:
@@ -1302,7 +1304,7 @@ def main() -> None:
             **应叫训练**
 
             - 对 1NT：Stayman、Jacoby Transfer、2NT 邀局、3NT 进局
-            - 对 1♥/1♠：简单加叫、限制性加叫、Jacoby 2NT、2/1 进局逼叫、1NT 半逼叫
+            - 对 1♥/1♠：简单加叫、限制性加叫、Jacoby 2NT、2/1 进局逼叫、1NT 半逼叫（11 点非均型 6+/5-5 可叫新花）
             - 对 1♣/1♦：优先叫 4 张高花；无高花时按牌力选择 1NT/2NT/3NT 或低花加叫
 
             **开叫者再叫训练**

@@ -569,6 +569,28 @@ class ResponseRecommendationTests(unittest.TestCase):
     def test_two_over_one_response_after_major(self) -> None:
         self.assertEqual(recommend_response("1♠", evaluation(12, 1, 4, 4, 4, balanced=False), vulnerability=VULNERABILITY).bid, "2♥")
 
+    def test_eleven_hcp_unbalanced_six_bids_new_suit(self) -> None:
+        # 0-2 支持、11HCP、6+ 套 → 叫新花，不走 1NT
+        result = recommend_response("1♠", evaluation(11, 2, 2, 6, 3, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♦")
+        self.assertEqual(result.rule_name, "11点非均型新花")
+
+    def test_eleven_hcp_unbalanced_fifty_five_bids_new_suit(self) -> None:
+        # 0-2 支持、11HCP、5-5 → 叫新花
+        result = recommend_response("1♠", evaluation(11, 2, 5, 5, 1, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♥")
+        self.assertEqual(result.rule_name, "11点非均型新花")
+
+    def test_eleven_hcp_balanced_still_uses_one_nt(self) -> None:
+        # 11 均型、无 6+/5-5 → 仍 1NT
+        result = recommend_response("1♠", evaluation(11, 2, 3, 4, 4, balanced=True), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "1NT")
+
+    def test_eleven_hcp_unbalanced_without_six_or_fifty_five_uses_one_nt(self) -> None:
+        # 11 非均型但仅 5-4-3-1，无 6+/5-5 → 仍 1NT
+        result = recommend_response("1♠", evaluation(11, 2, 3, 5, 3, balanced=False), vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "1NT")
+
     def test_forcing_nt_response_after_major(self) -> None:
         self.assertEqual(recommend_response("1♠", evaluation(8, 1, 3, 5, 4, balanced=False), vulnerability=VULNERABILITY).bid, "1NT")
 
@@ -1544,6 +1566,26 @@ class MajorForcingOneNtResponderRebidTests(unittest.TestCase):
         self.assertEqual(result.bid, "Pass")
         self.assertEqual(result.rule_name, "1M-1NT 后低花止叫")
 
+    def test_after_two_club_dual_support_invites_major(self) -> None:
+        # 高花 3 + 低花 5、10 HCP → 向开叫高花邀局（优先于低花加叫）
+        hand = evaluation(10, 2, 3, 3, 5, balanced=False)
+        result = recommend_responder_rebid("1♥", "1NT", "2♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♥")
+        self.assertEqual(result.rule_name, "1M-1NT 后两套支持邀局")
+
+    def test_after_two_diamond_dual_support_games_unbalanced_twelve(self) -> None:
+        hand = evaluation(12, 2, 3, 5, 3, balanced=False)
+        result = recommend_responder_rebid("1♥", "1NT", "2♦", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "1M-1NT 后两套支持进局")
+
+    def test_after_two_club_dual_support_min_still_passes_minor(self) -> None:
+        # 两套支持但低限 → 仍接受低花止叫
+        hand = evaluation(8, 2, 3, 3, 5, balanced=False)
+        result = recommend_responder_rebid("1♥", "1NT", "2♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "1M-1NT 后低花止叫")
+
     def test_after_two_club_passes_with_4441_four_card_fit(self) -> None:
         # 4-4-4-1：草花 4 张也视为低花配合 → Pass
         hand = evaluation(8, 4, 4, 1, 4, balanced=False)
@@ -1558,10 +1600,24 @@ class MajorForcingOneNtResponderRebidTests(unittest.TestCase):
         self.assertEqual(result.rule_name, "1M-1NT 后低花邀局")
 
     def test_after_two_club_bids_own_quality_suit(self) -> None:
-        # 5♦ 且有顶张 → 叫出自己的套 2♦
+        # 5♦ 且有顶张、高于开叫者 2♣ → 叫出自己的套 2♦
         hand = evaluation(8, 3, 2, 5, 3, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 1, "C": 0})
         result = recommend_responder_rebid("1♥", "1NT", "2♣", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "2♦")
+        self.assertEqual(result.rule_name, "1M-1NT 后自报好套")
+
+    def test_after_two_diamond_does_not_bid_lower_club_suit(self) -> None:
+        # 5♣ 好套但低于开叫者 2♦ → 不自报，偏好 2M
+        hand = evaluation(8, 3, 2, 3, 5, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 0, "C": 1})
+        result = recommend_responder_rebid("1♥", "1NT", "2♦", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♥")
+        self.assertEqual(result.rule_name, "1M-1NT 后偏好高花")
+
+    def test_after_two_diamond_bids_higher_heart_quality_suit(self) -> None:
+        # 开叫 1♠ 后，5♥ 高于开叫者 2♦ → 自报 2♥
+        hand = evaluation(8, 2, 5, 3, 3, balanced=False, top_honors_by_suit={"S": 0, "H": 1, "D": 0, "C": 0})
+        result = recommend_responder_rebid("1♠", "1NT", "2♦", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♥")
         self.assertEqual(result.rule_name, "1M-1NT 后自报好套")
 
     def test_after_two_diamond_prefers_major_with_only_four(self) -> None:
@@ -1588,6 +1644,32 @@ class MajorForcingOneNtResponderRebidTests(unittest.TestCase):
         result = recommend_responder_rebid("1♠", "1NT", "2♥", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "4♥")
         self.assertEqual(result.rule_name, "1M-1NT 后红心进局")
+
+    def test_after_two_heart_three_card_invites_at_max(self) -> None:
+        # 3 张红心、10-11 → 3♥ 邀局
+        hand = evaluation(10, 3, 3, 4, 3)
+        result = recommend_responder_rebid("1♠", "1NT", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♥")
+        self.assertEqual(result.rule_name, "1M-1NT 后红心邀局")
+
+    def test_after_two_heart_three_card_twelve_balanced_invites(self) -> None:
+        hand = evaluation(12, 3, 3, 4, 3, balanced=True)
+        result = recommend_responder_rebid("1♠", "1NT", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♥")
+        self.assertEqual(result.rule_name, "1M-1NT 后红心邀局")
+
+    def test_after_two_heart_three_card_twelve_unbalanced_games(self) -> None:
+        hand = evaluation(12, 3, 3, 5, 2, balanced=False)
+        result = recommend_responder_rebid("1♠", "1NT", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "1M-1NT 后红心进局")
+
+    def test_after_two_heart_max_without_heart_support_bids_two_nt(self) -> None:
+        # 高限无红心支持 → 2NT（优先于 2♠）
+        hand = evaluation(10, 3, 2, 4, 4)
+        result = recommend_responder_rebid("1♠", "1NT", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2NT")
+        self.assertEqual(result.rule_name, "1M-1NT 后无将邀局")
 
     def test_after_two_heart_from_spade_prefers_spade_without_heart_fit(self) -> None:
         hand = evaluation(8, 3, 2, 4, 4)

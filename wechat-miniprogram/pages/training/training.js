@@ -611,6 +611,12 @@ Page({
       if ((bid === '3♥' || bid === '4♥') && opening.strain === '♠' && auctionBids[2] === '2♥') {
         return `在 ${seq} 后再叫 ${bid}：1♠-1NT-2♥ 后支持红心。`
       }
+      if (
+        (bid === `3${opening.strain}` || bid === `4${opening.strain}`) &&
+        (auctionBids[2] === '2♣' || auctionBids[2] === '2♦')
+      ) {
+        return `在 ${seq} 后再叫 ${bid}：1M-1NT 后再叫低花后，两套支持或高花支持继续。`
+      }
       if (bid === '3♣' || bid === '3♦') {
         return `在 ${seq} 后再叫 ${bid}：1M-1NT 后加叫低花或试探低花成局/满贯。`
       }

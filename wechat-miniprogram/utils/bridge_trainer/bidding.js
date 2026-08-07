@@ -1953,9 +1953,12 @@ function recommend_after_major_forcing_one_nt(opening_bid, opener_rebid_bid, eva
   }
 
   function best_own_quality_suit_bid(exclude_suit) {
+    // 5+ 好套（至少 1 个顶张），且花色等级高于开叫者第二套
+    const suit_rank = { S: 4, H: 3, D: 2, C: 1 };
+    const opener_rank = suit_rank[exclude_suit];
     const candidates = ["S", "H", "D", "C"].filter(
       (suit) =>
-        suit !== exclude_suit &&
+        suit_rank[suit] > opener_rank &&
         lengths[suit] >= 5 &&
         (evaluation.top_honors_by_suit[suit] || 0) >= 1,
     );
@@ -2057,19 +2060,22 @@ function recommend_after_major_forcing_one_nt(opening_bid, opener_rebid_bid, eva
     );
   }
 
+  // 1♠-1NT-2♥：开叫者示 4 心
+  // 4+ ♥ → 加叫/进局；高限 3 张支持 → 3♥/4♥；高限无支持 → 2NT；否则 2♠
   if (opening_bid === "1♠" && opener_rebid_bid === "2♥") {
-    if (lengths.H >= 4) {
+    const heart_len = lengths.H;
+    if (heart_len >= 4) {
       if (gameish && is_legal_response_bid(opener_rebid_bid, "4♥")) {
         return bidRecommendation(
           "4♥",
-          `${sequence} 后开叫者再叫 2♥ 示 4 心；你有 ${lengths.H} 张红心和 ${hcp} HCP，叫 4♥ 进局。牌型：${length_text}。`,
+          `${sequence} 后开叫者再叫 2♥ 示 4 心；你有 ${heart_len} 张红心和 ${hcp} HCP，叫 4♥ 进局。牌型：${length_text}。`,
           "1M-1NT 后红心进局",
         );
       }
       if (max_values && is_legal_response_bid(opener_rebid_bid, "3♥")) {
         return bidRecommendation(
           "3♥",
-          `${sequence} 后开叫者再叫 2♥ 示 4 心；你有 ${lengths.H} 张红心和 ${hcp} HCP，叫 3♥ 邀局。牌型：${length_text}。`,
+          `${sequence} 后开叫者再叫 2♥ 示 4 心；你有 ${heart_len} 张红心和 ${hcp} HCP，叫 3♥ 邀局。牌型：${length_text}。`,
           "1M-1NT 后红心邀局",
         );
       }
@@ -2079,18 +2085,37 @@ function recommend_after_major_forcing_one_nt(opening_bid, opener_rebid_bid, eva
         "1M-1NT 后红心止叫",
       );
     }
+    if (heart_len >= 3) {
+      if (hcp >= 12 && !balanced && is_legal_response_bid(opener_rebid_bid, "4♥")) {
+        return bidRecommendation(
+          "4♥",
+          `${sequence} 后开叫者再叫 2♥；你有 3 张红心支持、${hcp} HCP 且非均型，叫 4♥ 进局。牌型：${length_text}。`,
+          "1M-1NT 后红心进局",
+        );
+      }
+      if (
+        ((hcp >= 10 && hcp <= 11) || (hcp === 12 && balanced)) &&
+        is_legal_response_bid(opener_rebid_bid, "3♥")
+      ) {
+        return bidRecommendation(
+          "3♥",
+          `${sequence} 后开叫者再叫 2♥；你有 3 张红心支持和 ${hcp} HCP，叫 3♥ 邀局。牌型：${length_text}。`,
+          "1M-1NT 后红心邀局",
+        );
+      }
+    }
+    if (max_values && heart_len < 3 && is_legal_response_bid(opener_rebid_bid, "2NT")) {
+      return bidRecommendation(
+        "2NT",
+        `${sequence} 后开叫者再叫 2♥；你无红心支持且有 ${hcp} HCP，叫 2NT 邀局。牌型：${length_text}。`,
+        "1M-1NT 后无将邀局",
+      );
+    }
     if (lengths.S >= 2 && is_legal_response_bid(opener_rebid_bid, "2♠")) {
       return bidRecommendation(
         "2♠",
-        `${sequence} 后开叫者再叫 2♥；你无 4 心但有 ${lengths.S} 张黑桃，叫 2♠ 偏好开叫花色。牌型：${length_text}。`,
+        `${sequence} 后开叫者再叫 2♥；当前偏好开叫花色，再叫 2♠。牌型：${length_text}。`,
         "1M-1NT 后偏好黑桃",
-      );
-    }
-    if (max_values && is_legal_response_bid(opener_rebid_bid, "2NT")) {
-      return bidRecommendation(
-        "2NT",
-        `${sequence} 后开叫者再叫 2♥；你无明确配合，有 ${hcp} HCP，叫 2NT 邀局。牌型：${length_text}。`,
-        "1M-1NT 后无将邀局",
       );
     }
     return bidRecommendation(
@@ -2100,6 +2125,9 @@ function recommend_after_major_forcing_one_nt(opening_bid, opener_rebid_bid, eva
     );
   }
 
+  // 开叫者 2♣/2♦：新低花（保证 3 张）
+  // 两套支持（高花3+/低花5+）→ 按点力加叫/进局；5+ 低花（或 4441）→ Pass/加叫；
+  // 5+ 好套 → 自报；高限 3 张支持 → 3M；高限无支持 → 2NT；否则 2M
   if (opener_rebid_bid === "2♣" || opener_rebid_bid === "2♦") {
     const minor_suit = symbol_to_suit(opener_rebid_bid.slice(1));
     const minor_three = `3${opener_rebid_bid.slice(1)}`;
@@ -2108,6 +2136,28 @@ function recommend_after_major_forcing_one_nt(opening_bid, opener_rebid_bid, eva
     const is_4441 = sortedLens.length === 4 && sortedLens[0] === 4 && sortedLens[1] === 4 && sortedLens[2] === 4 && sortedLens[3] === 1;
     const has_minor_fit = lengths[minor_suit] >= 5 || (is_4441 && lengths[minor_suit] >= 4);
     const three_card_opening_support = lengths[opening_suit] >= 3;
+    const has_dual_support = three_card_opening_support && lengths[minor_suit] >= 5;
+
+    // 两套支持：优先向开叫高花加叫/进局
+    if (has_dual_support) {
+      if (hcp >= 12 && !balanced && is_legal_response_bid(opener_rebid_bid, major_four)) {
+        return bidRecommendation(
+          major_four,
+          `${sequence} 后开叫者再叫低花；你有两套支持（${lengths[opening_suit]} 张开叫高花、${lengths[minor_suit]} 张低花）且 ${hcp} HCP 非均型，叫 ${major_four} 进局。牌型：${length_text}。`,
+          "1M-1NT 后两套支持进局",
+        );
+      }
+      if (
+        ((hcp >= 10 && hcp <= 11) || (hcp === 12 && balanced)) &&
+        is_legal_response_bid(opener_rebid_bid, major_three)
+      ) {
+        return bidRecommendation(
+          major_three,
+          `${sequence} 后开叫者再叫低花；你有两套支持（${lengths[opening_suit]} 张开叫高花、${lengths[minor_suit]} 张低花）和 ${hcp} HCP，叫 ${major_three} 邀局。牌型：${length_text}。`,
+          "1M-1NT 后两套支持邀局",
+        );
+      }
+    }
 
     if (has_minor_fit) {
       if (max_values && is_legal_response_bid(opener_rebid_bid, minor_three)) {
@@ -2128,7 +2178,7 @@ function recommend_after_major_forcing_one_nt(opening_bid, opener_rebid_bid, eva
     if (own_suit_bid !== null) {
       return bidRecommendation(
         own_suit_bid,
-        `${sequence} 后开叫者再叫低花；你有 5+ 好套（含顶张），叫出自己的套 ${own_suit_bid}。牌型：${length_text}。`,
+        `${sequence} 后开叫者再叫低花；你有 5+ 好套（含顶张）且高于开叫者第二套，叫出自己的套 ${own_suit_bid}。牌型：${length_text}。`,
         "1M-1NT 后自报好套",
       );
     }
@@ -3267,6 +3317,17 @@ function recommend_response_to_major(major, evaluation, settings, vulnerability)
         );
       }
     }
+    // 11HCP 非均型：有 6+ 套或 5-5 以上 → 叫新花（README 0-2 张支持）
+    if (hcp === 11 && !evaluation.balanced && has_six_or_fifty_five_shape(lengths)) {
+      const suit = choose_two_over_one_suit(lengths, major);
+      if (suit !== null) {
+        return bidRecommendation(
+          `2${suit_symbol(suit)}`,
+          `同伴开 1${major_bid}，你有 11 HCP 且非均型（6+ 套或 5-5 以上），虽未达常规 2/1 下限，仍叫新花 ${SUIT_NAMES[suit]}。牌型：${length_text}。`,
+          "11点非均型新花",
+        );
+      }
+    }
     if (hcp >= settings.forcing_nt_min_hcp && hcp <= settings.forcing_nt_max_hcp) {
       return bidRecommendation(
         "1NT",
@@ -3873,6 +3934,14 @@ function choose_gambling_3nt_minor(evaluation, opening_min_hcp) {
     }
     return (b === "D" ? 1 : 0) - (a === "D" ? 1 : 0);
   })[0];
+}
+
+function has_six_or_fifty_five_shape(lengths) {
+  const values = Object.values(lengths);
+  if (Math.max(...values) >= 6) {
+    return true;
+  }
+  return values.filter((length) => length >= 5).length >= 2;
 }
 
 function choose_two_over_one_suit(lengths, excluded) {

@@ -587,6 +587,61 @@ Page({
       return `在 ${seq} 后再叫 ${bid}：1NT 开叫后续的结构化再叫，用于确认配合与定约层级。`
     }
 
+    // 1M-1NT（逼叫一轮）后
+    if (
+      opening.level === 1 &&
+      (opening.strain === '♥' || opening.strain === '♠') &&
+      auctionBids[1] === '1NT'
+    ) {
+      if (bid === '3NT') {
+        return `在 ${seq} 后再叫 3NT：1M-1NT 后确认无将进局。`
+      }
+      if (bid === '4NT') {
+        return `在 ${seq} 后再叫 4NT：1M-1NT 后对开叫者 3NT 的高限邀叫。`
+      }
+      if (bid === '2NT') {
+        return `在 ${seq} 后再叫 2NT：1M-1NT 后无将邀局。`
+      }
+      if ((bid === '2♥' || bid === '2♠') && bid.slice(1) === opening.strain) {
+        return `在 ${seq} 后再叫 ${bid}：1M-1NT 后偏好开叫高花。`
+      }
+      if (['3♥', '3♠', '4♥', '4♠'].includes(bid) && bid.slice(1) === opening.strain) {
+        return `在 ${seq} 后再叫 ${bid}：1M-1NT 后继续开叫高花（邀局/进局）。`
+      }
+      if ((bid === '3♥' || bid === '4♥') && opening.strain === '♠' && auctionBids[2] === '2♥') {
+        return `在 ${seq} 后再叫 ${bid}：1♠-1NT-2♥ 后支持红心。`
+      }
+      if (bid === '3♣' || bid === '3♦') {
+        return `在 ${seq} 后再叫 ${bid}：1M-1NT 后加叫低花或试探低花成局/满贯。`
+      }
+      return `在 ${seq} 后再叫 ${bid}：1M-1NT 后续，按开叫者再叫语义与自身牌力选择。`
+    }
+
+    // 低花反加叫：1m-2m 后
+    if (
+      opening.level === 1 &&
+      (opening.strain === '♣' || opening.strain === '♦') &&
+      response.level === 2 &&
+      response.strain === opening.strain
+    ) {
+      if (bid === '3NT') {
+        return `在 ${seq} 后再叫 3NT：低花反加叫后确认无将进局。`
+      }
+      if (bid === '2NT') {
+        return `在 ${seq} 后再叫 2NT：低花反加叫后无将邀局。`
+      }
+      if (bid === '4NT') {
+        return `在 ${seq} 后再叫 4NT：低花反加叫后试探满贯（A 张问叫）。`
+      }
+      if ((bid === '5♣' || bid === '5♦') && bid.slice(1) === opening.strain) {
+        return `在 ${seq} 后再叫 ${bid}：低花反加叫后进低花局或回答满贯问叫。`
+      }
+      if (['3♣', '3♦', '4♣', '4♦'].includes(bid) && bid.slice(1) === opening.strain) {
+        return `在 ${seq} 后再叫 ${bid}：低花反加叫后回到/继续开叫低花。`
+      }
+      return `在 ${seq} 后再叫 ${bid}：低花反加叫后续，按开叫者再叫语义与自身牌力选择。`
+    }
+
     if (responder2.strain === 'NT') {
       if (openerRebid.strain === 'NT') {
         if (responder2.level === 2) {
@@ -600,7 +655,7 @@ Page({
     }
 
     if (responder2.strain === openerRebid.strain) {
-      return `在 ${seq} 后应叫者再叫 ${bid} 支持开叫者再叫花色：通常 10+ HCP，约 3+ 张支持。`
+      return `在 ${seq} 后应叫者再叫 ${bid} 支持开叫者再叫花色：通常 10+ HCP，约 4+ 张支持。`
     }
     if (responder2.strain === response.strain) {
       return `在 ${seq} 后应叫者重复原应叫花色 ${bid}：通常 10+ HCP，约 6+ 张该花色。`

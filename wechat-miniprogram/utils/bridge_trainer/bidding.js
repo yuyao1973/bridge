@@ -1807,6 +1807,444 @@ function recommend_after_stayman_rebid(
   );
 }
 
+function recommend_after_major_forcing_one_nt(opening_bid, opener_rebid_bid, evaluation) {
+  const hcp = evaluation.hcp;
+  const lengths = evaluation.lengths;
+  const length_text = describe_lengths(evaluation);
+  const balanced = evaluation.balanced;
+  const opening_contract = parse_contract_bid(opening_bid);
+  const opening_strain = opening_contract[1];
+  const opening_suit = symbol_to_suit(opening_strain);
+  const sequence = `${opening_bid}-1NT-${opener_rebid_bid}`;
+  const major_two = `2${opening_strain}`;
+  const major_three = `3${opening_strain}`;
+  const major_four = `4${opening_strain}`;
+  const max_values = hcp >= 10;
+  const gameish = hcp >= 11;
+  const three_card_major_support = lengths[opening_suit] >= 3;
+  const two_card_major_help = lengths[opening_suit] >= 2;
+
+  function best_long_minor_bid() {
+    if (balanced) return null;
+    const club_len = lengths.C;
+    const diamond_len = lengths.D;
+    if (club_len < 5 && diamond_len < 5) return null;
+    if (club_len >= diamond_len && club_len >= 5 && is_legal_response_bid(opener_rebid_bid, "3♣")) {
+      return "3♣";
+    }
+    if (diamond_len >= 5 && is_legal_response_bid(opener_rebid_bid, "3♦")) {
+      return "3♦";
+    }
+    return null;
+  }
+
+  if (opener_rebid_bid === "3NT") {
+    if (hcp >= 11 && hcp <= 12 && is_legal_response_bid(opener_rebid_bid, "4NT")) {
+      return bidRecommendation(
+        "4NT",
+        `${sequence} 后开叫者已落 3NT，你有 ${hcp} HCP（高限），叫 4NT 邀叫。牌型：${length_text}。`,
+        "1M-1NT 后无将邀局",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者已落 3NT，你有 ${hcp} HCP，建议止叫 Pass。牌型：${length_text}。`,
+      "1M-1NT 后无将止叫",
+    );
+  }
+
+  if (opener_rebid_bid === "2NT") {
+    if (hcp >= 8) {
+      if (three_card_major_support && !balanced && is_legal_response_bid(opener_rebid_bid, major_four)) {
+        return bidRecommendation(
+          major_four,
+          `${sequence} 后开叫者 2NT 约 17-18；你有 ${hcp} HCP、${lengths[opening_suit]} 张支持和非均型，叫 ${major_four}。牌型：${length_text}。`,
+          "1M-1NT 后高花进局",
+        );
+      }
+      if (hcp >= 10) {
+        const minor_bid = best_long_minor_bid();
+        if (minor_bid !== null) {
+          return bidRecommendation(
+            minor_bid,
+            `${sequence} 后开叫者 2NT；你有 ${hcp} HCP 与低花长套（非均型），叫 ${minor_bid} 试探低花成局/满贯。牌型：${length_text}。`,
+            "1M-1NT 后低花试探",
+          );
+        }
+      }
+      if (is_legal_response_bid(opener_rebid_bid, "3NT")) {
+        return bidRecommendation(
+          "3NT",
+          `${sequence} 后开叫者 2NT 约 17-18，你有 ${hcp} HCP，叫 3NT 成局。牌型：${length_text}。`,
+          "1M-1NT 后无将进局",
+        );
+      }
+    }
+    if (hcp >= 6 && hcp <= 7) {
+      if (three_card_major_support && !balanced && is_legal_response_bid(opener_rebid_bid, major_three)) {
+        return bidRecommendation(
+          major_three,
+          `${sequence} 后开叫者 2NT；你有 ${hcp} HCP、${lengths[opening_suit]} 张支持和非均型，叫 ${major_three}。牌型：${length_text}。`,
+          "1M-1NT 后高花邀局",
+        );
+      }
+      return bidRecommendation(
+        "Pass",
+        `${sequence} 后开叫者 2NT 约 17-18，你有 ${hcp} HCP，建议止叫 Pass。牌型：${length_text}。`,
+        "1M-1NT 后无将止叫",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者 2NT 约 17-18，你有 ${hcp} HCP（偏低），建议止叫 Pass。牌型：${length_text}。`,
+      "1M-1NT 后无将止叫",
+    );
+  }
+
+  if (opener_rebid_bid === major_two) {
+    if (max_values) {
+      if (two_card_major_help && is_legal_response_bid(opener_rebid_bid, major_three)) {
+        return bidRecommendation(
+          major_three,
+          `${sequence} 后开叫者重复高花示 6+ 张；你有 ${hcp} HCP 和 ${lengths[opening_suit]} 张帮助，叫 ${major_three} 邀局。牌型：${length_text}。`,
+          "1M-1NT 后高花邀局",
+        );
+      }
+      if (is_legal_response_bid(opener_rebid_bid, "2NT")) {
+        return bidRecommendation(
+          "2NT",
+          `${sequence} 后开叫者重复高花；你有 ${hcp} HCP 但无足够帮助，叫 2NT 邀无将局。牌型：${length_text}。`,
+          "1M-1NT 后无将邀局",
+        );
+      }
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者重复高花，你有 ${hcp} HCP，建议止叫 Pass。牌型：${length_text}。`,
+      "1M-1NT 后高花止叫",
+    );
+  }
+
+  if (opening_bid === "1♠" && opener_rebid_bid === "2♥") {
+    if (lengths.H >= 4) {
+      if (gameish && is_legal_response_bid(opener_rebid_bid, "4♥")) {
+        return bidRecommendation(
+          "4♥",
+          `${sequence} 后开叫者再叫 2♥ 示 4 心；你有 ${lengths.H} 张红心和 ${hcp} HCP，叫 4♥ 进局。牌型：${length_text}。`,
+          "1M-1NT 后红心进局",
+        );
+      }
+      if (max_values && is_legal_response_bid(opener_rebid_bid, "3♥")) {
+        return bidRecommendation(
+          "3♥",
+          `${sequence} 后开叫者再叫 2♥ 示 4 心；你有 ${lengths.H} 张红心和 ${hcp} HCP，叫 3♥ 邀局。牌型：${length_text}。`,
+          "1M-1NT 后红心邀局",
+        );
+      }
+      return bidRecommendation(
+        "Pass",
+        `${sequence} 后开叫者再叫 2♥，你有红心配合但牌力有限，建议止叫 Pass。牌型：${length_text}。`,
+        "1M-1NT 后红心止叫",
+      );
+    }
+    if (lengths.S >= 2 && is_legal_response_bid(opener_rebid_bid, "2♠")) {
+      return bidRecommendation(
+        "2♠",
+        `${sequence} 后开叫者再叫 2♥；你无 4 心但有 ${lengths.S} 张黑桃，叫 2♠ 偏好开叫花色。牌型：${length_text}。`,
+        "1M-1NT 后偏好黑桃",
+      );
+    }
+    if (max_values && is_legal_response_bid(opener_rebid_bid, "2NT")) {
+      return bidRecommendation(
+        "2NT",
+        `${sequence} 后开叫者再叫 2♥；你无明确配合，有 ${hcp} HCP，叫 2NT 邀局。牌型：${length_text}。`,
+        "1M-1NT 后无将邀局",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者再叫 2♥，你有 ${hcp} HCP，建议止叫 Pass。牌型：${length_text}。`,
+      "1M-1NT 后止叫",
+    );
+  }
+
+  if (opener_rebid_bid === "2♣" || opener_rebid_bid === "2♦") {
+    const minor_suit = symbol_to_suit(opener_rebid_bid.slice(1));
+    const minor_three = `3${opener_rebid_bid.slice(1)}`;
+    const has_minor_fit = lengths[minor_suit] >= 5;
+    const has_major_pref = lengths[opening_suit] >= 2;
+
+    if (max_values) {
+      if (has_major_pref && is_legal_response_bid(opener_rebid_bid, major_three)) {
+        return bidRecommendation(
+          major_three,
+          `${sequence} 后开叫者再叫低花；你有 ${hcp} HCP 与原花色帮助，叫 ${major_three} 邀局。牌型：${length_text}。`,
+          "1M-1NT 后高花邀局",
+        );
+      }
+      if (has_minor_fit && is_legal_response_bid(opener_rebid_bid, minor_three)) {
+        return bidRecommendation(
+          minor_three,
+          `${sequence} 后开叫者再叫低花；你有 ${lengths[minor_suit]} 张配合和 ${hcp} HCP，加叫 ${minor_three}。牌型：${length_text}。`,
+          "1M-1NT 后低花邀局",
+        );
+      }
+      if (is_legal_response_bid(opener_rebid_bid, "2NT")) {
+        return bidRecommendation(
+          "2NT",
+          `${sequence} 后开叫者再叫低花；你有 ${hcp} HCP 无明确套配合，叫 2NT 邀局。牌型：${length_text}。`,
+          "1M-1NT 后无将邀局",
+        );
+      }
+    }
+
+    if (has_minor_fit) {
+      return bidRecommendation(
+        "Pass",
+        `${sequence} 后开叫者再叫低花，你有 ${lengths[minor_suit]} 张配合且牌力有限，接受低花并止叫 Pass。牌型：${length_text}。`,
+        "1M-1NT 后低花止叫",
+      );
+    }
+    if (has_major_pref && is_legal_response_bid(opener_rebid_bid, major_two)) {
+      return bidRecommendation(
+        major_two,
+        `${sequence} 后开叫者再叫低花；你有 ${lengths[opening_suit]} 张原开叫高花，叫 ${major_two} 偏好开叫花色。牌型：${length_text}。`,
+        "1M-1NT 后偏好高花",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者再叫低花，你有 ${hcp} HCP，建议止叫 Pass。牌型：${length_text}。`,
+      "1M-1NT 后止叫",
+    );
+  }
+
+  return bidRecommendation(
+    "Pass",
+    `${sequence} 后，当前简化体系未覆盖该开叫者再叫，建议 Pass。你有 ${hcp} HCP，牌型：${length_text}。`,
+    "1M-1NT 后止叫",
+  );
+}
+
+function has_inverted_major_stop(evaluation, suit) {
+  return evaluation.lengths[suit] >= 1 && (evaluation.top_honors_by_suit[suit] || 0) >= 1;
+}
+
+function recommend_after_inverted_minor_responder_rebid(
+  opening_bid,
+  response_bid,
+  opener_rebid_bid,
+  evaluation,
+) {
+  const hcp = evaluation.hcp;
+  const lengths = evaluation.lengths;
+  const length_text = describe_lengths(evaluation);
+  const sequence = `${opening_bid}-${response_bid}-${opener_rebid_bid}`;
+  const opening_contract = parse_contract_bid(opening_bid);
+  const opening_strain = opening_contract[1];
+  const opening_suit = symbol_to_suit(opening_strain);
+  const minor_game = `5${opening_strain}`;
+  const minor_raise_4 = `4${opening_strain}`;
+  const minor_signoff_3 = `3${opening_strain}`;
+  const spade_stop = has_inverted_major_stop(evaluation, "S");
+  const heart_stop = has_inverted_major_stop(evaluation, "H");
+  const both_stops = spade_stop && heart_stop;
+
+  if (opener_rebid_bid === "3NT") {
+    if (hcp >= 18 && is_legal_response_bid(opener_rebid_bid, "6NT")) {
+      return bidRecommendation(
+        "6NT",
+        `${sequence} 后开叫者已落 3NT，你有 ${hcp} HCP，直接接受进 6NT。牌型：${length_text}。`,
+        "反加叫后接受大满贯",
+      );
+    }
+    if (hcp >= 16 && is_legal_response_bid(opener_rebid_bid, "4NT")) {
+      return bidRecommendation(
+        "4NT",
+        `${sequence} 后开叫者已落 3NT，你有 ${hcp} HCP，叫 4NT 试探满贯。牌型：${length_text}。`,
+        "反加叫后满贯试探",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者已落 3NT，你有 ${hcp} HCP，建议止叫 Pass。牌型：${length_text}。`,
+      "反加叫后无将止叫",
+    );
+  }
+
+  if (opener_rebid_bid === "5NT") {
+    if (hcp >= 13 && is_legal_response_bid(opener_rebid_bid, "6NT")) {
+      return bidRecommendation(
+        "6NT",
+        `${sequence} 后开叫者以 5NT 邀请 6NT，你有 ${hcp} HCP，接受进 6NT。牌型：${length_text}。`,
+        "反加叫后接受 6NT",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者以 5NT 邀请 6NT，你有 ${hcp} HCP（最低限），拒绝并止叫 Pass。牌型：${length_text}。`,
+      "反加叫后拒绝 6NT",
+    );
+  }
+
+  if (opener_rebid_bid === "4NT") {
+    if (is_legal_response_bid(opener_rebid_bid, minor_game)) {
+      return bidRecommendation(
+        minor_game,
+        `${sequence} 后开叫者 4NT 问 A 张，当前简化体系回到开叫低花 ${minor_game}。牌型：${length_text}。`,
+        "反加叫后回答 4NT",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者 4NT 问 A 张，当前无法继续描述，建议 Pass。牌型：${length_text}。`,
+      "反加叫后止叫",
+    );
+  }
+
+  if (opener_rebid_bid === "2NT") {
+    if (hcp >= 16 && is_legal_response_bid(opener_rebid_bid, "4NT")) {
+      return bidRecommendation(
+        "4NT",
+        `${sequence} 后开叫者 2NT 显示两高花有止，你有 ${hcp} HCP，叫 4NT 试探满贯。牌型：${length_text}。`,
+        "反加叫后满贯试探",
+      );
+    }
+    if (is_legal_response_bid(opener_rebid_bid, "3NT")) {
+      return bidRecommendation(
+        "3NT",
+        `${sequence} 后开叫者 2NT 显示两高花有止并倾向无将，你有 ${hcp} HCP，叫 3NT 成局。牌型：${length_text}。`,
+        "反加叫后无将进局",
+      );
+    }
+  }
+
+  if (opener_rebid_bid === minor_signoff_3) {
+    if (both_stops && is_legal_response_bid(opener_rebid_bid, "3NT")) {
+      return bidRecommendation(
+        "3NT",
+        `${sequence} 后开叫者重叫低花显示低限且高花无止；你有两高花止张和 ${hcp} HCP，叫 3NT。牌型：${length_text}。`,
+        "反加叫后无将进局",
+      );
+    }
+    if (hcp >= 14 && is_legal_response_bid(opener_rebid_bid, minor_game)) {
+      return bidRecommendation(
+        minor_game,
+        `${sequence} 后开叫者重叫低花且高花无止；你有 ${hcp} HCP，加叫到 ${minor_game} 进低花局。牌型：${length_text}。`,
+        "反加叫后低花进局",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者重叫低花显示低限且高花无止；你无两高花止张，建议止叫 Pass。牌型：${length_text}。`,
+      "反加叫后低花止叫",
+    );
+  }
+
+  const other_minor_rebids = opening_suit === "C" ? ["2♦"] : ["3♣"];
+  if (other_minor_rebids.includes(opener_rebid_bid)) {
+    if (spade_stop || heart_stop) {
+      const prefer_game = both_stops || hcp >= 13;
+      if (prefer_game && is_legal_response_bid(opener_rebid_bid, "3NT")) {
+        return bidRecommendation(
+          "3NT",
+          `${sequence} 后开叫者顺叫另一低花示低限有止；你有高花止张和 ${hcp} HCP，叫 3NT。牌型：${length_text}。`,
+          "反加叫后无将进局",
+        );
+      }
+      if (is_legal_response_bid(opener_rebid_bid, "2NT")) {
+        return bidRecommendation(
+          "2NT",
+          `${sequence} 后开叫者顺叫另一低花；你有部分高花止张和 ${hcp} HCP，叫 2NT 邀无将局。牌型：${length_text}。`,
+          "反加叫后无将邀局",
+        );
+      }
+      if (is_legal_response_bid(opener_rebid_bid, "3NT")) {
+        return bidRecommendation(
+          "3NT",
+          `${sequence} 后开叫者顺叫另一低花；你有高花止张和 ${hcp} HCP，叫 3NT。牌型：${length_text}。`,
+          "反加叫后无将进局",
+        );
+      }
+    }
+    if (hcp >= 14 && is_legal_response_bid(opener_rebid_bid, minor_game)) {
+      return bidRecommendation(
+        minor_game,
+        `${sequence} 后开叫者顺叫另一低花；你无足够高花止张，有 ${hcp} HCP，进 ${minor_game}。牌型：${length_text}。`,
+        "反加叫后低花进局",
+      );
+    }
+    if (is_legal_response_bid(opener_rebid_bid, minor_signoff_3)) {
+      return bidRecommendation(
+        minor_signoff_3,
+        `${sequence} 后开叫者顺叫另一低花；你无足够高花止张，回到开叫低花 ${minor_signoff_3}。牌型：${length_text}。`,
+        "反加叫后回到低花",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者顺叫另一低花；当前无更合适叫品，建议 Pass。牌型：${length_text}。`,
+      "反加叫后止叫",
+    );
+  }
+
+  if (["2♥", "2♠", "3♥", "3♠"].includes(opener_rebid_bid)) {
+    const short_strain = opener_rebid_bid.slice(1);
+    const short_suit = symbol_to_suit(short_strain);
+    const other_major = short_suit === "H" ? "S" : "H";
+    const other_stop = has_inverted_major_stop(evaluation, other_major);
+    const is_splinter = ["3♥", "3♠"].includes(opener_rebid_bid);
+    const slam_hcp = is_splinter ? 13 : 14;
+
+    if (hcp >= slam_hcp && is_legal_response_bid(opener_rebid_bid, "4NT")) {
+      return bidRecommendation(
+        "4NT",
+        `${sequence} 后开叫者${is_splinter ? "Splinter" : "报单缺"}试探满贯，你有 ${hcp} HCP，叫 4NT 问 A 张。牌型：${length_text}。`,
+        "反加叫后满贯试探",
+      );
+    }
+    if (other_stop && is_legal_response_bid(opener_rebid_bid, "3NT")) {
+      return bidRecommendation(
+        "3NT",
+        `${sequence} 后开叫者在 ${SUIT_NAMES[short_suit]} 示单缺；你有另一高花止张和 ${hcp} HCP，叫 3NT。牌型：${length_text}。`,
+        "反加叫后无将进局",
+      );
+    }
+    if (hcp >= slam_hcp && is_legal_response_bid(opener_rebid_bid, minor_game)) {
+      return bidRecommendation(
+        minor_game,
+        `${sequence} 后开叫者试探满贯；你有 ${hcp} HCP 但无将不理想，进低花局 ${minor_game}。牌型：${length_text}。`,
+        "反加叫后低花进局",
+      );
+    }
+    if (is_legal_response_bid(opener_rebid_bid, minor_raise_4)) {
+      return bidRecommendation(
+        minor_raise_4,
+        `${sequence} 后开叫者试探满贯；你牌力有限，先加到 ${minor_raise_4}。牌型：${length_text}。`,
+        "反加叫后低花继续",
+      );
+    }
+    if (is_legal_response_bid(opener_rebid_bid, minor_signoff_3)) {
+      return bidRecommendation(
+        minor_signoff_3,
+        `${sequence} 后开叫者试探满贯；你牌力有限，回到 ${minor_signoff_3}。牌型：${length_text}。`,
+        "反加叫后回到低花",
+      );
+    }
+    return bidRecommendation(
+      "Pass",
+      `${sequence} 后开叫者试探满贯；当前无更合适叫品，建议 Pass。牌型：${length_text}。`,
+      "反加叫后止叫",
+    );
+  }
+
+  return bidRecommendation(
+    "Pass",
+    `${sequence} 后，当前简化体系未覆盖该开叫者再叫，建议 Pass。你有 ${hcp} HCP，牌型：${length_text}。`,
+    "反加叫后止叫",
+  );
+}
+
 function recommend_responder_rebid(opening_bid, response_bid, opener_rebid_bid, evaluation, settings, vulnerability) {
   settings = settings || defaultRuleSettings();
   const hcp = evaluation.hcp;
@@ -1987,6 +2425,28 @@ function recommend_responder_rebid(opening_bid, response_bid, opener_rebid_bid, 
   const nt_invite_high = nt_game_hcp - 1;
   const raise_hcp = hcp - game_adjustment;
 
+  // 1M-1NT（逼叫一轮）后：按开叫者再叫继续
+  if ((opening_bid === "1♥" || opening_bid === "1♠") && response_bid === "1NT") {
+    return recommend_after_major_forcing_one_nt(opening_bid, opener_rebid_bid, evaluation);
+  }
+
+  // 低花反加叫开启且 1m-2m：按开叫者再叫语义继续
+  if (
+    settings.inverted_minors_enabled &&
+    opening_contract !== null &&
+    opening_contract[0] === 1 &&
+    ["♣", "♦"].includes(opening_contract[1]) &&
+    response_contract[0] === 2 &&
+    response_contract[1] === opening_contract[1]
+  ) {
+    return recommend_after_inverted_minor_responder_rebid(
+      opening_bid,
+      response_bid,
+      opener_rebid_bid,
+      evaluation,
+    );
+  }
+
   if (opening_bid === "1NT") {
     const game_adjustment_nt = game_threshold_adjustment(vulnerability, settings);
     const nt_resp_game_hcp = Math.max(8, 10 + game_adjustment_nt);
@@ -2151,13 +2611,13 @@ function recommend_responder_rebid(opening_bid, response_bid, opener_rebid_bid, 
     );
   }
 
-  if (["H", "S"].includes(opener_suit) && lengths[opener_suit] >= 3) {
+  if (["H", "S"].includes(opener_suit) && lengths[opener_suit] >= 4) {
     const level = choose_raise_level(opener_rebid_contract[0], raise_hcp);
     const bid = `${level}${suit_symbol(opener_suit)}`;
     if (is_legal_response_bid(opener_rebid_bid, bid)) {
       return bidRecommendation(
         bid,
-        `开叫者再叫 ${opener_rebid_bid}，你有 ${lengths[opener_suit]} 张支持和 ${hcp} HCP，继续支持到 ${bid}。牌型：${length_text}。`,
+        `开叫者再叫 ${opener_rebid_bid}，你有 ${lengths[opener_suit]} 张支持（4+）和 ${hcp} HCP，继续支持到 ${bid}。牌型：${length_text}。`,
         "支持开叫者再叫花色",
       );
     }
@@ -2179,18 +2639,37 @@ function recommend_responder_rebid(opening_bid, response_bid, opener_rebid_bid, 
     }
   }
 
-  if (hcp >= Math.max(10, 12 + game_adjustment) && is_legal_response_bid(opener_rebid_bid, "3NT")) {
+  if (hcp >= nt_game_hcp && is_legal_response_bid(opener_rebid_bid, "3NT")) {
     return bidRecommendation(
       "3NT",
-      `你有 ${hcp} HCP，虽无明确高花配合，优先转入 3NT 进局。牌型：${length_text}。`,
-      "默认 3NT 进局",
+      `你有 ${hcp} HCP，虽无明确高花配合，叫 3NT 进无将局。牌型：${length_text}。`,
+      "无配合无将进局",
+    );
+  }
+  if (
+    hcp >= nt_invite_low &&
+    hcp <= nt_invite_high &&
+    is_legal_response_bid(opener_rebid_bid, "2NT")
+  ) {
+    return bidRecommendation(
+      "2NT",
+      `你有 ${hcp} HCP，虽无明确高花配合，叫 2NT 邀无将局。牌型：${length_text}。`,
+      "无配合无将邀局",
+    );
+  }
+  const nt_one_min = Math.max(5, 6 + game_adjustment);
+  if (hcp >= nt_one_min && is_legal_response_bid(opener_rebid_bid, "1NT")) {
+    return bidRecommendation(
+      "1NT",
+      `你有 ${hcp} HCP，虽无明确高花配合，再叫 1NT 描述牌力。牌型：${length_text}。`,
+      "无配合再叫 1NT",
     );
   }
 
   return bidRecommendation(
     "Pass",
-    `当前简化规则下无更优再应叫，建议 Pass。你有 ${hcp} HCP，牌型：${length_text}。`,
-    "默认止叫",
+    `当前无明确配合且牌力不足以继续无将动作，建议 Pass。你有 ${hcp} HCP，牌型：${length_text}。`,
+    "无配合止叫",
   );
 }
 

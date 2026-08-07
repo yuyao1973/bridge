@@ -407,8 +407,8 @@ class MajorOpeningForcingNtIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.settings = RuleSettings()
 
-    def test_heart_opening_forcing_nt_second_suit_responder_passes(self) -> None:
-        # 开叫 13 HCP 2-5-4-2 1♥；应叫 9 HCP 1NT 半逼叫；再叫 2♦；Pass
+    def test_heart_opening_forcing_nt_second_suit_responder_prefers_major(self) -> None:
+        # 开叫 13 HCP 2-5-4-2 1♥；应叫 9 HCP 1NT；再叫 2♦；仅 4♦ 不算配合 → 2♥ 偏好
         opener_hand = make_hand([
             ("S","K"),("S","3"),
             ("H","A"),("H","J"),("H","8"),("H","7"),("H","6"),
@@ -430,13 +430,13 @@ class MajorOpeningForcingNtIntegrationTests(unittest.TestCase):
         self.assertEqual(opening.bid, "1♥")
         self.assertEqual(response.bid, "1NT")
         self.assertEqual(opener_rebid.bid, "2♦")
-        self.assertEqual(responder_rebid.bid, "Pass")
+        self.assertEqual(responder_rebid.bid, "2♥")
         with patch("bridge_trainer.training.deal", return_value={"N": opener_hand, "E": [], "S": responder_hand, "W": []}):
             question = generate_responder_rebid_question(seed=0, settings=self.settings, opener_bid="1♥")
         self.assertEqual(question.opener_bid, "1♥")
         self.assertEqual(question.response_bid, "1NT")
         self.assertEqual(question.opener_rebid_bid, "2♦")
-        self.assertEqual(question.recommendation.bid, "Pass")
+        self.assertEqual(question.recommendation.bid, "2♥")
         self.assertTrue(question.auction.startswith("1♥-Pass-1NT-Pass-2♦-Pass-?"))
 
 

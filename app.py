@@ -804,6 +804,43 @@ def contextual_responder_rebid_meaning(bid: str, auction_bids: list[str]) -> str
             return f"在 {seq} 后再叫 {bid}：1NT 体系后续中以无将邀局/进局为主线。"
         return f"在 {seq} 后再叫 {bid}：1NT 开叫后续的结构化再叫，用于确认配合与定约层级。"
 
+    # 1M-1NT（逼叫一轮）后
+    if opening[0] == 1 and opening[1] in {"♥", "♠"} and auction_bids[1] == "1NT":
+        if bid == "3NT":
+            return f"在 {seq} 后再叫 3NT：1M-1NT 后确认无将进局。"
+        if bid == "4NT":
+            return f"在 {seq} 后再叫 4NT：1M-1NT 后对开叫者 3NT 的高限邀叫。"
+        if bid == "2NT":
+            return f"在 {seq} 后再叫 2NT：1M-1NT 后无将邀局。"
+        if bid in {"2♥", "2♠"} and bid[1:] == opening[1]:
+            return f"在 {seq} 后再叫 {bid}：1M-1NT 后偏好开叫高花。"
+        if bid in {"3♥", "3♠", "4♥", "4♠"} and bid[1:] == opening[1]:
+            return f"在 {seq} 后再叫 {bid}：1M-1NT 后继续开叫高花（邀局/进局）。"
+        if bid in {"3♥", "4♥"} and opening[1] == "♠" and auction_bids[2] == "2♥":
+            return f"在 {seq} 后再叫 {bid}：1♠-1NT-2♥ 后支持红心。"
+        if bid in {"3♣", "3♦"}:
+            return f"在 {seq} 后再叫 {bid}：1M-1NT 后加叫低花或试探低花成局/满贯。"
+        return f"在 {seq} 后再叫 {bid}：1M-1NT 后续，按开叫者再叫语义与自身牌力选择。"
+
+    # 低花反加叫：1m-2m 后
+    if (
+        opening[0] == 1
+        and opening[1] in {"♣", "♦"}
+        and response[0] == 2
+        and response[1] == opening[1]
+    ):
+        if bid == "3NT":
+            return f"在 {seq} 后再叫 3NT：低花反加叫后确认无将进局。"
+        if bid == "2NT":
+            return f"在 {seq} 后再叫 2NT：低花反加叫后无将邀局。"
+        if bid == "4NT":
+            return f"在 {seq} 后再叫 4NT：低花反加叫后试探满贯（A 张问叫）。"
+        if bid in {"5♣", "5♦"} and bid[1:] == opening[1]:
+            return f"在 {seq} 后再叫 {bid}：低花反加叫后进低花局或回答满贯问叫。"
+        if bid in {"3♣", "3♦", "4♣", "4♦"} and bid[1:] == opening[1]:
+            return f"在 {seq} 后再叫 {bid}：低花反加叫后回到/继续开叫低花。"
+        return f"在 {seq} 后再叫 {bid}：低花反加叫后续，按开叫者再叫语义与自身牌力选择。"
+
     if responder2[1] == "NT":
         if opener_rebid[1] == "NT":
             if responder2[0] == 2:
@@ -813,7 +850,7 @@ def contextual_responder_rebid_meaning(bid: str, auction_bids: list[str]) -> str
         return f"在 {seq} 后应叫者再叫 {bid}：通常显示均型并推进到邀局/进局层级。"
 
     if responder2[1] == opener_rebid[1]:
-        return f"在 {seq} 后应叫者再叫 {bid} 支持开叫者再叫花色：通常 10+ HCP，约 3+ 张支持。"
+        return f"在 {seq} 后应叫者再叫 {bid} 支持开叫者再叫花色：通常 10+ HCP，约 4+ 张支持。"
     if responder2[1] == response[1]:
         return f"在 {seq} 后应叫者重复原应叫花色 {bid}：通常 10+ HCP，约 6+ 张该花色。"
     if responder2[1] == opening[1]:

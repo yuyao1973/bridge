@@ -1711,12 +1711,151 @@ def has_inverted_major_stop(evaluation: HandEvaluation, suit: str) -> bool:
     return evaluation.lengths[suit] >= 1 and evaluation.top_honors_by_suit.get(suit, 0) >= 1
 
 
+def is_major_support_first_response(
+    opening_bid: str,
+    response_bid: str,
+    settings: RuleSettings,
+) -> bool:
+    """1M 开叫后，第一次应叫是否表示支持开叫高花（README 第3条）。"""
+    if opening_bid not in {"1♥", "1♠"}:
+        return False
+    opening_strain = opening_bid[1:]
+    opening_suit = symbol_to_suit(opening_strain)
+    assert opening_suit is not None
+
+    # 直接加叫 2M/3M/4M
+    if response_bid in {f"2{opening_strain}", f"3{opening_strain}", f"4{opening_strain}"}:
+        return True
+
+    # Jacoby 2NT
+    if settings.jacoby_2nt_enabled and response_bid == "2NT":
+        return True
+
+    # Bergen 3♣/3♦
+    if settings.bergen_raises_enabled and response_bid in {"3♣", "3♦"}:
+        return True
+
+    # Splinter：跳叫另一高花（3OM）；低花 splinter 与 Bergen 冲突时仅在未启用 Bergen 时识别
+    other_major_strain = "♠" if opening_suit == "H" else "♥"
+    if response_bid == f"3{other_major_strain}":
+        return True
+    if not settings.bergen_raises_enabled and response_bid in {"3♣", "3♦"}:
+        return True
+
+    return False
+
+
+def major_support_response_is_maximum(
+    opening_bid: str,
+    response_bid: str,
+    evaluation: HandEvaluation,
+    settings: RuleSettings,
+) -> bool:
+    """判断支持性应叫是否属于该档高限（用于开叫者 3M 邀叫后接受/拒绝）。"""
+    hcp = evaluation.hcp
+    opening_strain = opening_bid[1:]
+
+    if response_bid == f"2{opening_strain}":
+        # 简单加叫约 6-9：高限取上半档
+        return hcp >= max(8, settings.responder_simple_raise_max - 1)
+    if response_bid == f"3{opening_strain}":
+        if settings.bergen_raises_enabled:
+            # Bergen 下 3M 为弱跳加叫（约 0-6）：默认低限，不接受邀叫进局
+            return False
+        # 限制性加叫约 10-12：高限取上限附近
+        return hcp >= settings.responder_limit_raise_max
+    if response_bid == "3♣":
+        return hcp >= settings.responder_bergen_weak_max
+    if response_bid == "3♦":
+        # Bergen 中等支持本身偏邀叫，对开叫者 3M 通常接受
+        return True
+    if response_bid == "2NT":
+        return True
+    if response_bid == f"4{opening_strain}":
+        return False
+    # Splinter 等：偏强，接受进局
+    return True
+
+
+def recommend_after_major_support_response(
+    opening_bid: str,
+    response_bid: str,
+    opener_rebid_bid: str,
+    evaluation: HandEvaluation,
+    settings: RuleSettings,
+) -> BidRecommendation:
+    """1M 开叫且第一次应叫已示支持后，应叫者第二次应叫（README 第3条）。"""
+    hcp = evaluation.hcp
+    lengths = evaluation.lengths
+    length_text = describe_lengths(evaluation)
+    opening_strain = opening_bid[1:]
+    opening_suit = symbol_to_suit(opening_strain)
+    assert opening_suit is not None
+    sequence = f"{opening_bid}-{response_bid}-{opener_rebid_bid}"
+    major_three = f"3{opening_strain}"
+    major_four = f"4{opening_strain}"
+    opener_rebid_contract = parse_contract_bid(opener_rebid_bid)
+
+    # 开叫者 4M：进局止叫
+    if opener_rebid_bid == major_four:
+        return BidRecommendation(
+            "Pass",
+            f"{sequence} 后开叫者已进局 {major_four}，建议止叫 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+            "支持后再叫高花止叫",
+        )
+
+    # 开叫者 3M：邀叫；低限 Pass，高限 4M
+    if opener_rebid_bid == major_three:
+        if major_support_response_is_maximum(opening_bid, response_bid, evaluation, settings):
+            if is_legal_response_bid(opener_rebid_bid, major_four):
+                return BidRecommendation(
+                    major_four,
+                    f"{sequence} 后开叫者以 {major_three} 邀局；你第一次应叫属高限（{hcp} HCP），叫 {major_four} 接受。牌型：{length_text}。",
+                    "支持后再叫高花进局",
+                )
+        return BidRecommendation(
+            "Pass",
+            f"{sequence} 后开叫者以 {major_three} 邀局；你第一次应叫属低限（{hcp} HCP），建议止叫 Pass。牌型：{length_text}。",
+            "支持后再叫高花止叫",
+        )
+
+    # 开叫者出新花：有配合（新花 4+）→ 4M，否则回 3M
+    if opener_rebid_contract is not None and opener_rebid_contract[1] != "NT":
+        rebid_suit = symbol_to_suit(opener_rebid_contract[1])
+        if rebid_suit is not None and rebid_suit != opening_suit:
+            has_new_suit_fit = lengths[rebid_suit] >= 4
+            if has_new_suit_fit and is_legal_response_bid(opener_rebid_bid, major_four):
+                return BidRecommendation(
+                    major_four,
+                    f"{sequence} 后开叫者再叫新花；你有 {lengths[rebid_suit]} 张配合，叫 {major_four} 进局。牌型：{length_text}。",
+                    "支持后新花有配合进局",
+                )
+            if is_legal_response_bid(opener_rebid_bid, major_three):
+                return BidRecommendation(
+                    major_three,
+                    f"{sequence} 后开叫者再叫新花；你无足够新花配合，回到 {major_three}。牌型：{length_text}。",
+                    "支持后新花无配合回加",
+                )
+            if is_legal_response_bid(opener_rebid_bid, major_four):
+                return BidRecommendation(
+                    major_four,
+                    f"{sequence} 后开叫者再叫新花；无法回到 3 阶，叫 {major_four}。牌型：{length_text}。",
+                    "支持后新花进局",
+                )
+
+    return BidRecommendation(
+        "Pass",
+        f"{sequence} 后，当前简化体系对支持后再叫未覆盖该叫品，建议 Pass。你有 {hcp} HCP，牌型：{length_text}。",
+        "支持后再叫止叫",
+    )
+
+
 def recommend_after_major_forcing_one_nt(
     opening_bid: str,
     opener_rebid_bid: str,
     evaluation: HandEvaluation,
 ) -> BidRecommendation:
-    """1M-1NT（逼叫一轮）后应叫者第二次应叫（README 第4条）。"""
+    """1M-1NT（逼叫一轮）后应叫者第二次应叫（README 第5条）。"""
     hcp = evaluation.hcp
     lengths = evaluation.lengths
     length_text = describe_lengths(evaluation)
@@ -1730,11 +1869,16 @@ def recommend_after_major_forcing_one_nt(
     major_two = f"2{opening_strain}"
     major_three = f"3{opening_strain}"
     major_four = f"4{opening_strain}"
-    # 1NT 应叫约 5-12：10-11/12 为高限
+    # 1NT 应叫约 5-12：10-11/12 为高限；9HCP 有单缺可视作高限帮助
     max_values = hcp >= 10
     gameish = hcp >= 11
+    has_shortage = min(lengths.values()) <= 1
     three_card_major_support = lengths[opening_suit] >= 3
     two_card_major_help = lengths[opening_suit] >= 2
+    # 2M 后再叫：高限有帮助=10-11 有 2+，或 9 有单缺且 2+
+    two_major_can_invite_major = two_card_major_help and (
+        max_values or (hcp == 9 and has_shortage)
+    )
 
     def best_long_minor_bid() -> str | None:
         """非均型且 5+ 低花长套时，选更长的 3m（等长优先 ♣）。"""
@@ -1749,6 +1893,21 @@ def recommend_after_major_forcing_one_nt(
         if diamond_len >= 5 and is_legal_response_bid(opener_rebid_bid, "3♦"):
             return "3♦"
         return None
+
+    def best_own_quality_suit_bid(exclude_suit: str) -> str | None:
+        """5+ 好套（至少 1 个顶张大牌），排除开叫者再叫低花。"""
+        candidates = [
+            suit
+            for suit in ["S", "H", "D", "C"]
+            if suit != exclude_suit
+            and lengths[suit] >= 5
+            and evaluation.top_honors_by_suit.get(suit, 0) >= 1
+        ]
+        if not candidates:
+            return None
+        # 更长优先；等长时优先高花、再优先黑桃
+        suit = max(candidates, key=lambda s: (lengths[s], s in {"S", "H"}, s == "S"))
+        return minimum_legal_bid_for_suit(suit, opener_rebid_bid)
 
     # 开叫者 3NT：11-12 → 4NT 邀叫，否则 Pass
     if opener_rebid_bid == "3NT":
@@ -1815,21 +1974,21 @@ def recommend_after_major_forcing_one_nt(
             "1M-1NT 后无将止叫",
         )
 
-    # 开叫者 2M：重复 6+ 原花色；5-9 Pass；高限 10-11 有帮助 3M，无帮助 2NT
+    # 开叫者 2M：重复 6+ 原花色
+    # 低限(5-8 / 9均型) Pass；高限有 2+/3 张支持（10-11，或 9 有单缺）→ 3M；高限无帮助 → 2NT
     if opener_rebid_bid == major_two:
-        if max_values:
-            if two_card_major_help and is_legal_response_bid(opener_rebid_bid, major_three):
-                return BidRecommendation(
-                    major_three,
-                    f"{sequence} 后开叫者重复高花示 6+ 张；你有 {hcp} HCP 和 {lengths[opening_suit]} 张帮助，叫 {major_three} 邀局。牌型：{length_text}。",
-                    "1M-1NT 后高花邀局",
-                )
-            if is_legal_response_bid(opener_rebid_bid, "2NT"):
-                return BidRecommendation(
-                    "2NT",
-                    f"{sequence} 后开叫者重复高花；你有 {hcp} HCP 但无足够帮助，叫 2NT 邀无将局。牌型：{length_text}。",
-                    "1M-1NT 后无将邀局",
-                )
+        if two_major_can_invite_major and is_legal_response_bid(opener_rebid_bid, major_three):
+            return BidRecommendation(
+                major_three,
+                f"{sequence} 后开叫者重复高花示 6+ 张；你有 {hcp} HCP 和 {lengths[opening_suit]} 张帮助，叫 {major_three} 邀局。牌型：{length_text}。",
+                "1M-1NT 后高花邀局",
+            )
+        if max_values and not two_card_major_help and is_legal_response_bid(opener_rebid_bid, "2NT"):
+            return BidRecommendation(
+                "2NT",
+                f"{sequence} 后开叫者重复高花；你有 {hcp} HCP 但无足够帮助，叫 2NT 邀无将局。牌型：{length_text}。",
+                "1M-1NT 后无将邀局",
+            )
         return BidRecommendation(
             "Pass",
             f"{sequence} 后开叫者重复高花，你有 {hcp} HCP，建议止叫 Pass。牌型：{length_text}。",
@@ -1874,46 +2033,54 @@ def recommend_after_major_forcing_one_nt(
             "1M-1NT 后止叫",
         )
 
-    # 开叫者 2♣/2♦：新低花（保证 3 张）；5+ 低花配合可 Pass/加叫
+    # 开叫者 2♣/2♦：新低花（保证 3 张）
+    # 5+ 低花配合（或 4441 且该低花 4 张）→ Pass/加叫；5+ 好套 → 叫出自己的套；高限 3 张支持 → 3M；高限无支持 → 2NT；否则 2M
     if opener_rebid_bid in {"2♣", "2♦"}:
         minor_suit = symbol_to_suit(opener_rebid_bid[1:])
         assert minor_suit is not None
         minor_three = f"3{opener_rebid_bid[1:]}"
-        has_minor_fit = lengths[minor_suit] >= 5
-        has_major_pref = lengths[opening_suit] >= 2
+        # 5+ 低花配合，或 4441 且在该低花有 4 张
+        is_4441 = sorted(lengths.values(), reverse=True) == [4, 4, 4, 1]
+        has_minor_fit = lengths[minor_suit] >= 5 or (is_4441 and lengths[minor_suit] >= 4)
+        three_card_opening_support = lengths[opening_suit] >= 3
 
-        # 高限：优先描述（3M / 2NT），再考虑低花加叫
-        if max_values:
-            if has_major_pref and is_legal_response_bid(opener_rebid_bid, major_three):
-                return BidRecommendation(
-                    major_three,
-                    f"{sequence} 后开叫者再叫低花；你有 {hcp} HCP 与原花色帮助，叫 {major_three} 邀局。牌型：{length_text}。",
-                    "1M-1NT 后高花邀局",
-                )
-            if has_minor_fit and is_legal_response_bid(opener_rebid_bid, minor_three):
+        if has_minor_fit:
+            if max_values and is_legal_response_bid(opener_rebid_bid, minor_three):
                 return BidRecommendation(
                     minor_three,
                     f"{sequence} 后开叫者再叫低花；你有 {lengths[minor_suit]} 张配合和 {hcp} HCP，加叫 {minor_three}。牌型：{length_text}。",
                     "1M-1NT 后低花邀局",
                 )
-            if is_legal_response_bid(opener_rebid_bid, "2NT"):
-                return BidRecommendation(
-                    "2NT",
-                    f"{sequence} 后开叫者再叫低花；你有 {hcp} HCP 无明确套配合，叫 2NT 邀局。牌型：{length_text}。",
-                    "1M-1NT 后无将邀局",
-                )
-
-        # 低/中限：有 5+ 低花配合则 Pass；否则 2M 偏好原花色
-        if has_minor_fit:
             return BidRecommendation(
                 "Pass",
-                f"{sequence} 后开叫者再叫低花，你有 {lengths[minor_suit]} 张配合且牌力有限，接受低花并止叫 Pass。牌型：{length_text}。",
+                f"{sequence} 后开叫者再叫低花，你有 {lengths[minor_suit]} 张配合，接受低花并止叫 Pass。牌型：{length_text}。",
                 "1M-1NT 后低花止叫",
             )
-        if has_major_pref and is_legal_response_bid(opener_rebid_bid, major_two):
+
+        own_suit_bid = best_own_quality_suit_bid(minor_suit)
+        if own_suit_bid is not None:
+            return BidRecommendation(
+                own_suit_bid,
+                f"{sequence} 后开叫者再叫低花；你有 5+ 好套（含顶张），叫出自己的套 {own_suit_bid}。牌型：{length_text}。",
+                "1M-1NT 后自报好套",
+            )
+
+        if max_values and three_card_opening_support and is_legal_response_bid(opener_rebid_bid, major_three):
+            return BidRecommendation(
+                major_three,
+                f"{sequence} 后开叫者再叫低花；你有 {hcp} HCP 与 3 张开叫花色支持，叫 {major_three} 邀局。牌型：{length_text}。",
+                "1M-1NT 后高花邀局",
+            )
+        if max_values and is_legal_response_bid(opener_rebid_bid, "2NT"):
+            return BidRecommendation(
+                "2NT",
+                f"{sequence} 后开叫者再叫低花；你有 {hcp} HCP 但无 3 张开叫花色支持，叫 2NT 邀局。牌型：{length_text}。",
+                "1M-1NT 后无将邀局",
+            )
+        if is_legal_response_bid(opener_rebid_bid, major_two):
             return BidRecommendation(
                 major_two,
-                f"{sequence} 后开叫者再叫低花；你有 {lengths[opening_suit]} 张原开叫高花，叫 {major_two} 偏好开叫花色。牌型：{length_text}。",
+                f"{sequence} 后开叫者再叫低花；当前偏好开叫花色，再叫 {major_two}。牌型：{length_text}。",
                 "1M-1NT 后偏好高花",
             )
         return BidRecommendation(
@@ -1935,7 +2102,7 @@ def recommend_after_inverted_minor_responder_rebid(
     opener_rebid_bid: str,
     evaluation: HandEvaluation,
 ) -> BidRecommendation:
-    """低花反加叫开启且 1m-2m 后，应叫者第二次应叫（README 第5条）。"""
+    """低花反加叫开启且 1m-2m 后，应叫者第二次应叫（README 第6条）。"""
     hcp = evaluation.hcp
     lengths = evaluation.lengths
     length_text = describe_lengths(evaluation)
@@ -2292,6 +2459,16 @@ def recommend_responder_rebid(
             evaluation,
         )
 
+    # 1M 开叫后第一次应叫已示支持：按开叫者再叫继续（README 第3条）
+    if is_major_support_first_response(opening_bid, response_bid, settings):
+        return recommend_after_major_support_response(
+            opening_bid,
+            response_bid,
+            opener_rebid_bid,
+            evaluation,
+            settings,
+        )
+
     # 低花反加叫开启且 1m-2m：按开叫者再叫语义继续
     if (
         settings.inverted_minors_enabled
@@ -2455,14 +2632,22 @@ def recommend_responder_rebid(
             "对无将再叫止叫",
         )
 
-    if opener_suit in {"H", "S"} and lengths[opener_suit] >= 4:
+    # 开叫者再叫新高花且形成 4+ 配合：继续支持（README 第2条）
+    opening_suit_for_new = symbol_to_suit(opening_contract[1]) if opening_contract is not None else None
+    response_suit_for_new = symbol_to_suit(response_contract[1]) if response_contract[1] != "NT" else None
+    if (
+        opener_suit in {"H", "S"}
+        and lengths[opener_suit] >= 4
+        and opener_suit != opening_suit_for_new
+        and opener_suit != response_suit_for_new
+    ):
         level = choose_raise_level(opener_rebid_contract[0], raise_hcp)
         bid = f"{level}{suit_symbol(opener_suit)}"
         if is_legal_response_bid(opener_rebid_bid, bid):
             return BidRecommendation(
                 bid,
-                f"开叫者再叫 {opener_rebid_bid}，你有 {lengths[opener_suit]} 张支持（4+）和 {hcp} HCP，继续支持到 {bid}。牌型：{length_text}。",
-                "支持开叫者再叫花色",
+                f"开叫者再叫新花 {opener_rebid_bid}，你有 {lengths[opener_suit]} 张高花配合（4+）和 {hcp} HCP，继续支持到 {bid}。牌型：{length_text}。",
+                "支持开叫者再叫新花",
             )
 
     response_suit = symbol_to_suit(response_contract[1])

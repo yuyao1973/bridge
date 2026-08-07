@@ -820,7 +820,25 @@ def contextual_responder_rebid_meaning(bid: str, auction_bids: list[str]) -> str
             return f"在 {seq} 后再叫 {bid}：1♠-1NT-2♥ 后支持红心。"
         if bid in {"3♣", "3♦"}:
             return f"在 {seq} 后再叫 {bid}：1M-1NT 后加叫低花或试探低花成局/满贯。"
+        if bid in {"2♣", "2♦", "2♥", "2♠"} and bid != auction_bids[2]:
+            return f"在 {seq} 后再叫 {bid}：1M-1NT 后叫出自己的好套，或偏好开叫花色。"
         return f"在 {seq} 后再叫 {bid}：1M-1NT 后续，按开叫者再叫语义与自身牌力选择。"
+
+    # 1M 开叫后第一次应叫已示支持
+    if (
+        opening[0] == 1
+        and opening[1] in {"♥", "♠"}
+        and (
+            auction_bids[1] in {f"2{opening[1]}", f"3{opening[1]}", f"4{opening[1]}", "2NT", "3♣", "3♦"}
+            or (opening[1] == "♥" and auction_bids[1] == "3♠")
+            or (opening[1] == "♠" and auction_bids[1] == "3♥")
+        )
+    ):
+        if bid == "Pass":
+            return f"在 {seq} 后 Pass：支持开叫高花后，对开叫者再叫选择止叫。"
+        if bid in {f"3{opening[1]}", f"4{opening[1]}"}:
+            return f"在 {seq} 后再叫 {bid}：1M 支持后按开叫者再叫继续（接受邀叫/进局或回到开叫高花）。"
+        return f"在 {seq} 后再叫 {bid}：1M 支持后的结构化再叫。"
 
     # 低花反加叫：1m-2m 后
     if (
@@ -850,7 +868,7 @@ def contextual_responder_rebid_meaning(bid: str, auction_bids: list[str]) -> str
         return f"在 {seq} 后应叫者再叫 {bid}：通常显示均型并推进到邀局/进局层级。"
 
     if responder2[1] == opener_rebid[1]:
-        return f"在 {seq} 后应叫者再叫 {bid} 支持开叫者再叫花色：通常 10+ HCP，约 4+ 张支持。"
+        return f"在 {seq} 后应叫者再叫 {bid} 支持开叫者再叫新花：通常 10+ HCP，约 4+ 张高花配合。"
     if responder2[1] == response[1]:
         return f"在 {seq} 后应叫者重复原应叫花色 {bid}：通常 10+ HCP，约 6+ 张该花色。"
     if responder2[1] == opening[1]:

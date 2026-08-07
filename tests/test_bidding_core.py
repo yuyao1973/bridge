@@ -1215,17 +1215,25 @@ class RebidRecommendationTests(unittest.TestCase):
         hand = evaluation(13, 3, 3, 4, 3)
         self.assertEqual(recommend_responder_rebid("1♦", "1♥", "1NT", hand, vulnerability=VULNERABILITY).bid, "3NT")
 
-    def test_responder_rebid_supports_opener_rebid_major(self) -> None:
-        # 4 张红心配合 → 继续支持
+    def test_responder_rebid_supports_opener_new_major(self) -> None:
+        # 开叫者再叫新高花且 4+ 配合 → 支持
+        hand = evaluation(10, 4, 4, 3, 2, balanced=False)
+        result = recommend_responder_rebid("1♣", "1♥", "1♠", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♠")
+        self.assertEqual(result.rule_name, "支持开叫者再叫新花")
+
+    def test_responder_rebid_does_not_support_raised_own_major_as_new_suit(self) -> None:
+        # 1♦-1♥-2♥ 是加叫应叫花色，不是开叫者新花 → 不走第2条
         hand = evaluation(10, 2, 4, 4, 3)
         result = recommend_responder_rebid("1♦", "1♥", "2♥", hand, vulnerability=VULNERABILITY)
-        self.assertEqual(result.bid, "3♥")
-        self.assertEqual(result.rule_name, "支持开叫者再叫花色")
+        self.assertNotEqual(result.rule_name, "支持开叫者再叫新花")
+        self.assertEqual(result.bid, "2NT")
+        self.assertEqual(result.rule_name, "无配合无将邀局")
 
-    def test_responder_rebid_does_not_support_major_with_only_three(self) -> None:
-        # 仅 3 张红心不算配合，走无配合无将档
-        hand = evaluation(11, 3, 3, 4, 3)
-        result = recommend_responder_rebid("1♦", "1♥", "2♥", hand, vulnerability=VULNERABILITY)
+    def test_responder_rebid_does_not_support_new_major_with_only_three(self) -> None:
+        # 仅 3 张黑桃不算新花配合
+        hand = evaluation(11, 3, 4, 3, 3)
+        result = recommend_responder_rebid("1♣", "1♥", "1♠", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "2NT")
         self.assertEqual(result.rule_name, "无配合无将邀局")
 
@@ -1499,6 +1507,18 @@ class MajorForcingOneNtResponderRebidTests(unittest.TestCase):
         self.assertEqual(result.bid, "Pass")
         self.assertEqual(result.rule_name, "1M-1NT 后高花止叫")
 
+    def test_after_two_major_passes_nine_balanced(self) -> None:
+        hand = evaluation(9, 3, 2, 4, 4, balanced=True)
+        result = recommend_responder_rebid("1♥", "1NT", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "1M-1NT 后高花止叫")
+
+    def test_after_two_major_invites_nine_with_shortage(self) -> None:
+        hand = evaluation(9, 4, 2, 6, 1, balanced=False)
+        result = recommend_responder_rebid("1♥", "1NT", "2♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♥")
+        self.assertEqual(result.rule_name, "1M-1NT 后高花邀局")
+
     def test_after_two_major_invites_with_max(self) -> None:
         hand = evaluation(10, 3, 2, 4, 4)
         result = recommend_responder_rebid("1♥", "1NT", "2♥", hand, vulnerability=VULNERABILITY)
@@ -1523,6 +1543,26 @@ class MajorForcingOneNtResponderRebidTests(unittest.TestCase):
         result = recommend_responder_rebid("1♥", "1NT", "2♦", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "Pass")
         self.assertEqual(result.rule_name, "1M-1NT 后低花止叫")
+
+    def test_after_two_club_passes_with_4441_four_card_fit(self) -> None:
+        # 4-4-4-1：草花 4 张也视为低花配合 → Pass
+        hand = evaluation(8, 4, 4, 1, 4, balanced=False)
+        result = recommend_responder_rebid("1♥", "1NT", "2♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "1M-1NT 后低花止叫")
+
+    def test_after_two_diamond_raises_with_fit_at_max(self) -> None:
+        hand = evaluation(10, 2, 2, 5, 4, balanced=False)
+        result = recommend_responder_rebid("1♥", "1NT", "2♦", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♦")
+        self.assertEqual(result.rule_name, "1M-1NT 后低花邀局")
+
+    def test_after_two_club_bids_own_quality_suit(self) -> None:
+        # 5♦ 且有顶张 → 叫出自己的套 2♦
+        hand = evaluation(8, 3, 2, 5, 3, balanced=False, top_honors_by_suit={"S": 0, "H": 0, "D": 1, "C": 0})
+        result = recommend_responder_rebid("1♥", "1NT", "2♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2♦")
+        self.assertEqual(result.rule_name, "1M-1NT 后自报好套")
 
     def test_after_two_diamond_prefers_major_with_only_four(self) -> None:
         # 仅 4 张低花不算配合 → 偏好 2M
@@ -1555,11 +1595,18 @@ class MajorForcingOneNtResponderRebidTests(unittest.TestCase):
         self.assertEqual(result.bid, "2♠")
         self.assertEqual(result.rule_name, "1M-1NT 后偏好黑桃")
 
-    def test_after_two_club_max_invites_major(self) -> None:
-        hand = evaluation(10, 3, 2, 4, 4)
+    def test_after_two_club_max_invites_major_with_three(self) -> None:
+        # 高限需 3 张开叫花色才 3M
+        hand = evaluation(10, 2, 3, 4, 4)
         result = recommend_responder_rebid("1♥", "1NT", "2♣", hand, vulnerability=VULNERABILITY)
         self.assertEqual(result.bid, "3♥")
         self.assertEqual(result.rule_name, "1M-1NT 后高花邀局")
+
+    def test_after_two_club_max_two_nt_with_only_two_major(self) -> None:
+        hand = evaluation(10, 3, 2, 4, 4)
+        result = recommend_responder_rebid("1♥", "1NT", "2♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "2NT")
+        self.assertEqual(result.rule_name, "1M-1NT 后无将邀局")
 
 
 class InvertedMinorResponderRebidTests(unittest.TestCase):
@@ -1633,11 +1680,50 @@ class InvertedMinorResponderRebidTests(unittest.TestCase):
         self.assertEqual(result.rule_name, "反加叫后满贯试探")
 
     def test_disabled_inverted_does_not_use_special_path(self) -> None:
-        # 关闭反加叫时，1♣-2♣-2♥ 有 4+ 心按“支持开叫者再叫高花”处理
+        # 关闭反加叫时，1♣-2♣-2♥ 有 4+ 心按“支持开叫者再叫新花”处理
         settings = RuleSettings(inverted_minors_enabled=False)
         hand = evaluation(11, 2, 4, 2, 5)
         result = recommend_responder_rebid("1♣", "2♣", "2♥", hand, settings=settings, vulnerability=VULNERABILITY)
-        self.assertEqual(result.rule_name, "支持开叫者再叫花色")
+        self.assertEqual(result.rule_name, "支持开叫者再叫新花")
+
+
+class MajorSupportResponderRebidTests(unittest.TestCase):
+    def test_after_four_major_passes(self) -> None:
+        hand = evaluation(8, 2, 3, 4, 4)
+        result = recommend_responder_rebid("1♥", "2♥", "4♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "支持后再叫高花止叫")
+
+    def test_after_three_major_passes_with_minimum_simple_raise(self) -> None:
+        hand = evaluation(7, 2, 3, 4, 4)
+        result = recommend_responder_rebid("1♥", "2♥", "3♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "Pass")
+        self.assertEqual(result.rule_name, "支持后再叫高花止叫")
+
+    def test_after_three_major_accepts_with_maximum_simple_raise(self) -> None:
+        hand = evaluation(9, 2, 3, 4, 4)
+        result = recommend_responder_rebid("1♥", "2♥", "3♥", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "支持后再叫高花进局")
+
+    def test_after_new_suit_games_with_fit(self) -> None:
+        hand = evaluation(8, 2, 3, 2, 6, balanced=False)
+        result = recommend_responder_rebid("1♥", "2♥", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "支持后新花有配合进局")
+
+    def test_after_new_suit_returns_to_three_major_without_fit(self) -> None:
+        hand = evaluation(8, 3, 3, 4, 3)
+        result = recommend_responder_rebid("1♥", "2♥", "3♣", hand, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "3♥")
+        self.assertEqual(result.rule_name, "支持后新花无配合回加")
+
+    def test_bergen_three_club_accepts_invite_at_max(self) -> None:
+        settings = RuleSettings(bergen_raises_enabled=True)
+        hand = evaluation(9, 2, 4, 3, 4, balanced=False)
+        result = recommend_responder_rebid("1♥", "3♣", "3♥", hand, settings=settings, vulnerability=VULNERABILITY)
+        self.assertEqual(result.bid, "4♥")
+        self.assertEqual(result.rule_name, "支持后再叫高花进局")
 
 
 class UtilityRuleTests(unittest.TestCase):

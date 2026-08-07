@@ -614,7 +614,29 @@ Page({
       if (bid === '3♣' || bid === '3♦') {
         return `在 ${seq} 后再叫 ${bid}：1M-1NT 后加叫低花或试探低花成局/满贯。`
       }
+      if (['2♣', '2♦', '2♥', '2♠'].includes(bid) && bid !== auctionBids[2]) {
+        return `在 ${seq} 后再叫 ${bid}：1M-1NT 后叫出自己的好套，或偏好开叫花色。`
+      }
       return `在 ${seq} 后再叫 ${bid}：1M-1NT 后续，按开叫者再叫语义与自身牌力选择。`
+    }
+
+    // 1M 开叫后第一次应叫已示支持
+    if (
+      opening.level === 1 &&
+      (opening.strain === '♥' || opening.strain === '♠') &&
+      (
+        [`2${opening.strain}`, `3${opening.strain}`, `4${opening.strain}`, '2NT', '3♣', '3♦'].includes(auctionBids[1]) ||
+        (opening.strain === '♥' && auctionBids[1] === '3♠') ||
+        (opening.strain === '♠' && auctionBids[1] === '3♥')
+      )
+    ) {
+      if (bid === 'Pass') {
+        return `在 ${seq} 后 Pass：支持开叫高花后，对开叫者再叫选择止叫。`
+      }
+      if (bid === `3${opening.strain}` || bid === `4${opening.strain}`) {
+        return `在 ${seq} 后再叫 ${bid}：1M 支持后按开叫者再叫继续（接受邀叫/进局或回到开叫高花）。`
+      }
+      return `在 ${seq} 后再叫 ${bid}：1M 支持后的结构化再叫。`
     }
 
     // 低花反加叫：1m-2m 后
@@ -655,7 +677,7 @@ Page({
     }
 
     if (responder2.strain === openerRebid.strain) {
-      return `在 ${seq} 后应叫者再叫 ${bid} 支持开叫者再叫花色：通常 10+ HCP，约 4+ 张支持。`
+      return `在 ${seq} 后应叫者再叫 ${bid} 支持开叫者再叫新花：通常 10+ HCP，约 4+ 张高花配合。`
     }
     if (responder2.strain === response.strain) {
       return `在 ${seq} 后应叫者重复原应叫花色 ${bid}：通常 10+ HCP，约 6+ 张该花色。`
